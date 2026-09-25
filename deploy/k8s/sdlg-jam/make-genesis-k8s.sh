@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenera genesis-k8s.json (mismas claves y saldos que blockchain/genesis/genesis.json)
+# Regenera genesis-k8s.json (mismas claves y saldos que node-ts/genesis/genesis.json)
 # pero con epochStart fresco apuntando al FUTURO.
 #
 # Por que al futuro: si los pods nacen con head=0 cuando el slot ya arranco (epochStart
@@ -9,12 +9,12 @@
 # tiempo de levantar y hacer peering ANTES del slot 0.
 #
 # Uso: ./make-genesis-k8s.sh [genesis-origen] [buffer-ms] [namespace]
-#   default genesis: ../../../blockchain/genesis/genesis.json (relativo al repo)
+#   default genesis: ../../../node-ts/genesis/genesis.json (relativo al repo)
 #   default buffer : 90000 (90s)
 #   default ns     : 2023241041
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
-SRC="${1:-$DIR/../../../blockchain/genesis/genesis.json}"
+SRC="${1:-$DIR/../../../node-ts/genesis/genesis.json}"
 BUF_MS="${2:-90000}"
 NS="${3:-2023241041}"
 

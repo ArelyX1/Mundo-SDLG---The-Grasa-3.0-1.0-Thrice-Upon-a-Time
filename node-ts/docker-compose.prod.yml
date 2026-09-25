@@ -5,7 +5,7 @@ name: sdlg-jam-prod
 # solo hablan p2p interno. Proteja 80/443 con un reverse proxy (Caddy/nginx).
 #
 # Ejemplo en un servidor:
-#   git clone <repo> && cd blockchain
+#   git clone <repo> && cd node-ts
 #   npm ci && npm run build
 #   node dist/cli/main.js init --validators 4 --users 5 --out ./genesis \
 #       --seed ws://validator-0:30334

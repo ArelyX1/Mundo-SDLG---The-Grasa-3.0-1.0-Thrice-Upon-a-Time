@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Crea el Secret `sdlg-wallets` a partir de los archivos locales blockchain/wallets/.
-# Ejecutar desde K8S/blockchain/sdlg-jam/ (o pasar la ruta de wallets como $1).
+# Crea el Secret `sdlg-wallets` a partir de los archivos locales node-ts/wallets/.
+# Ejecutar desde deploy/k8s/sdlg-jam/ (o pasar la ruta de wallets como $1).
 # Uso:
-#   ./02-wallets-secret.sh            # usa ../../../blockchain/wallets
+#   ./02-wallets-secret.sh            # usa ../../../node-ts/wallets
 #   ./02-wallets-secret.sh /ruta/wallets
 set -euo pipefail
 
 NAMESPACE="${NAMESPACE:-2023241041}"
-WALLETS_DIR="${1:-../../../blockchain/wallets}"
+WALLETS_DIR="${1:-../../../node-ts/wallets}"
 
 if [ ! -d "$WALLETS_DIR" ]; then
   echo "Error: no existe $WALLETS_DIR" >&2

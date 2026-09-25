@@ -36,7 +36,7 @@ Cómo re-tunear (los valores están en los `resources:` de cada manifest):
 - Acceso a internet para bajar `arelyxl/sdlg-jam:0.1.0` de Docker Hub. Si el cluster es
   offline, importala a mano: `docker pull arelyxl/sdlg-jam:0.1.0` y
   `ctr -n k8s.io images import` (o `k3d image import`).
-- Las **wallets** (`blockchain/wallets/*.json`) NO están en git: copiás la carpeta desde el
+- Las **wallets** (`node-ts/wallets/*.json`) NO están en git: copiás la carpeta desde el
   server original a la máquina desde donde hacés el deploy.
 
 ## Estructura de archivos
@@ -61,15 +61,15 @@ Cómo re-tunear (los valores están en los `resources:` de cada manifest):
 ### A) Red nueva desde cero (verificada en `epis-k3s`)
 
 ```bash
-cd K8S/blockchain/sdlg-jam
+cd deploy/k8s/sdlg-jam
 
 # 1) (opcional) si el namespace del nuevo cluster es distinto:
 ./set-namespace.sh mi-namespace          # reescribe manifests y scripts
 
 # 2) deploy completo (regenera genesis, wallets-configmap, PVCs, 4 deployments, service):
-./deploy-rbac-min.sh /ruta/completa/blockchain/wallets mí-namespace
+./deploy-rbac-min.sh /ruta/completa/node-ts/wallets mí-namespace
 #    si usaste set-namespace.sh ya no hace falta pasar el namespace:
-./deploy-rbac-min.sh /ruta/completa/blockchain/wallets
+./deploy-rbac-min.sh /ruta/completa/node-ts/wallets
 
 # 3) verificar (sin exec, usa logs):
 for v in 0 1 2 3; do kubectl -n mi-namespace logs deploy/validator-$v --tail=30 \
@@ -100,15 +100,15 @@ pvc, services, pods/logs) pero **no get/create secrets** (es el caso en el clust
 SA `system:serviceaccount:2023241041:2023241041`), usá el script:
 
 ```bash
-cd K8S/blockchain/sdlg-jam
-./deploy-rbac-min.sh ../../../blockchain/wallets 2023241041
+cd deploy/k8s/sdlg-jam
+./deploy-rbac-min.sh ../../../node-ts/wallets 2023241041
 ```
 
 El script:
 1. Regenera el genesis k8s con `epochStart` **al futuro** (ver `make-genesis-k8s.sh`).
 2. Aplica `00-namespace.yaml` (si no hay permiso, no es bloqueante).
 3. Aplica el genesis ConfigMap.
-4. Crea `sdlg-wallets` como **ConfigMap** (monta `blockchain/wallets/*.json`).
+4. Crea `sdlg-wallets` como **ConfigMap** (monta `node-ts/wallets/*.json`).
 5. Aplica PVC + los 4 deployments (imagen `arelyxl/sdlg-jam:0.1.0` desde Docker Hub).
 6. Crea el Service interno.
 7. Espera el rollout y muestra estado.
@@ -142,7 +142,7 @@ mismo `stateRoot=872346c6…` en los 4, sin WARNs de postergación.
 ### Modo admin (Secret — recomendado)
 
 ```bash
-cd K8S/blockchain/sdlg-jam
+cd deploy/k8s/sdlg-jam
 
 # 0) genesis k8s con epochStart al futuro (evita el deadlock de bootstrap, ver arriba)
 ./make-genesis-k8s.sh
@@ -151,8 +151,8 @@ cd K8S/blockchain/sdlg-jam
 kubectl apply -f 00-namespace.yaml
 kubectl apply -f 01-genesis-configmap.yaml
 
-# 2) wallets como Secret (lee blockchain/wallets/*.json, NO los commitea)
-./02-wallets-secret.sh ../../../blockchain/wallets
+# 2) wallets como Secret (lee node-ts/wallets/*.json, NO los commitea)
+./02-wallets-secret.sh ../../../node-ts/wallets
 
 # 3) almacenamiento + validators
 kubectl apply -f 05-pvc.yaml          # ajusta storageClassName segun tu cluster
@@ -289,8 +289,8 @@ nginx sobra; solo lo usarias para enrutar varios hostnames por diversa razon.
 ## Notas
 
 - La cadena en k8s arranca **desde genesis = cadena nueva** (data PVC limpio). No hereda el estado
-  local de `blockchain/data/`.
+  local de `node-ts/data/`.
 - El genesis aun acredita saldos a `user-0/1/2` (direcciones sin clave). Si queres una red nueva
   sin esos saldos, regenera el genesis antes de subir el ConfigMap.
 - Los 4 validators montan el MISMO Secret `sdlg-wallets` (como en docker-compose cada uno lee su
-  wallet por nombre). No comitees `blockchain/wallets/*.json` si no esta en `.gitignore`.
+  wallet por nombre). No comitees `node-ts/wallets/*.json` si no esta en `.gitignore`.

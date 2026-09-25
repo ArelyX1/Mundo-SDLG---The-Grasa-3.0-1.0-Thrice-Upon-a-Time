@@ -17,7 +17,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ ! -d "$WALLETS_DIR" ]; then echo "no existe el dir de wallets: $WALLETS_DIR"; exit 1; fi
 
 echo "==> [1/7] genesis k8s regenerado con epochStart al futuro (evita deadlock de bootstrap)"
-GEN_SRC="${GEN_SRC:-$DIR/../../../blockchain/genesis/genesis.json}"
+GEN_SRC="${GEN_SRC:-$DIR/../../../node-ts/genesis/genesis.json}"
 "$DIR/make-genesis-k8s.sh" "$GEN_SRC" 90000 "$NS"
 
 echo "==> [2/7] namespace (si no existe)"

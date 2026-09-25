@@ -1,0 +1,15 @@
+# Entorno local y dependencias externas
+node_modules/
+dist/
+*.log
+.env
+.DS_Store
+
+# El nodo Go es un fork de eigerco/strawberry y conserva su propio historial
+# git para que los merges de upstream sigan siendo posibles. Es un repositorio
+# anidado, versionado por separado desde node-go/.git.
+node-go/
+
+# Repos de terceros clonados solo como material de referencia: no forman parte
+# del proyecto y no se versionan. Ver references/README.md.
+references/
