@@ -1,0 +1,82 @@
+# Tunnel de Cloudflare (cloudflared) dentro del cluster -> expone la red SIN IP publica.
+# Tunnel:   e2d6e3c9-07d8-4987-b6d9-8e3a97e3ec18
+# DNS:      cryptopapu.neravy.us  -> EVM RPC (8545) para MetaMask
+#
+# El token va DIRECTAMENTE en los args del Deployment (patron del repo Lidercom; SIN
+# Secret ni ConfigMap de token). La config de ingress va en un ConfigMap.
+#
+# Desplegar:
+#   kubectl apply -f 06-tunnel-cloudflared.yaml
+#
+# DNS en Cloudflare (zona neravy.us): CNAME
+#   cryptopapu  CNAME  e2d6e3c9-07d8-4987-b6d9-8e3a97e3ec18.cfargotunnel.com
+#   (o: cloudflared tunnel route dns e2d6e3c9-... cryptopapu.neravy.us)
+#
+# ⚠️ Caveat: el token queda en el manifest (igual que en tus otros repos). Si el repo es
+# publico, rotalo (regenerar token en Zero Trust -> Networks -> Tunnels -> Configure) y
+# actualiza el arg. Tambien: NO agrupar este hostname en otra tunnel (cada tunnel = token
+# propio). Para replicar en otro server, cambia 172.16.10.31 por la IP de ESE nodo.
+#
+# Clientes: agregar red "Mundo SDLG" en MetaMask con
+#   RPC URL: https://cryptopapu.neravy.us   (el https lo termina Cloudflare)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: "2023241041"
+data:
+  config.yml: |
+    ingress:
+      - hostname: cryptopapu.neravy.us
+        service: http://172.16.10.31:32545
+      - service: http_status:404
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sdlg-cloudflared
+  namespace: "2023241041"
+  labels:
+    app: sdlg-cloudflared
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sdlg-cloudflared
+  template:
+    metadata:
+      labels:
+        app: sdlg-cloudflared
+    spec:
+      containers:
+      - name: tunnel
+        image: cloudflare/cloudflared:latest
+        imagePullPolicy: Always
+        args:
+        - --config
+        - /etc/cloudflared/config.yml
+        - tunnel
+        - --no-autoupdate
+        - run
+        - --token
+        - eyJhIjoiYjk2ZjE2YTY0ZDc5OTJhN2E2OGJjMmRlYjIxNzc1MTUiLCJ0IjoiZTJkNmUzYzktMDdkOC00OTg3LWI2ZDktOGUzYTk3ZTNlYzE4IiwicyI6IllUaG1Nak14WkRjdE1qZzVaUzAwWVRabExXRTBZelF0TUROa09UY3pNVFUwWldFMFl6RTRNMkZsTXpBdE16WmxOeTAwTXpSa0xUaGtPVGt0TWpJd09HSTBNREF5TURNdyJ9
+        ports:
+        - { name: metrics, containerPort: 20242, protocol: TCP }
+        volumeMounts:
+        - { name: config, mountPath: /etc/cloudflared/config.yml, subPath: config.yml }
+        resources:
+          requests: { cpu: 10m, memory: 24Mi }
+          limits: { cpu: 100m, memory: 60Mi }
+      volumes:
+      - name: config
+        configMap:
+          name: cloudflared-config
+      restartPolicy: Always
+
+# Si ademas queres exponer JSON-RPC y economy API por dominio, agrega en config.yml:
+#      - hostname: rpc.cryptopapu.neravy.us
+#        service: http://172.16.10.31:32244
+#      - hostname: api.cryptopapu.neravy.us
+#        service: http://172.16.10.31:32080
+# y crea los CNAME correspondientes en Cloudflare.

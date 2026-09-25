@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sdlg-genesis
+  namespace: "2023241041"
+data:
+  genesis.json: |-
+    {
+      "network": "sdlg-jam",
+      "timeslotSecs": 6,
+      "cores": 1,
+      "createdAt": "2026-09-23T22:32:58.173Z",
+      "epochStart": 1790202868173,
+      "validators": [
+        {
+          "name": "validator-0",
+          "publicKey": "600e56f81e2982c2fd1fbb3ddf1b9f4fe6c80057de99a3709f7f2d2357b504a3"
+        },
+        {
+          "name": "validator-1",
+          "publicKey": "26a8f8227f35674ecf5431723072f861e0251621d81d85afc4688407698ac9e8"
+        },
+        {
+          "name": "validator-2",
+          "publicKey": "0741d1215adc4ffaa76a0c92475e38bee1fcf68490ad3f72c5a5b7783e6f639c"
+        },
+        {
+          "name": "validator-3",
+          "publicKey": "2354d89218a3a805e9dec6758046280bedc277c46e5e490bd58405e3ed86e037"
+        }
+      ],
+      "seedPeers": [],
+      "economy": {
+        "maxSupply": "1000000000",
+        "decimals": 12,
+        "issuer": "sdlgYsddpudnTY8tup2DtKeP5yTj4vQ2irGDvBEX6PuSAWpYCtnry",
+        "initialBalances": {
+          "sdlgYsddpudnTY8tup2DtKeP5yTj4vQ2irGDvBEX6PuSAWpYCtnry": "700000000",
+          "sdlgjJd5JxQPjEooPdq8qLxrbwNWSUZnxpnwaLHxxusTc3zXWQALW": "100000",
+          "sdlgJ2X635uEpUcUwLAEKR6JPDh72EKNXvW88krEHDkwiSfafCJ23": "100000",
+          "sdlg4CNd8vUAVV3vbS7SD3YDYszoFUjmh6g2FqgiJ8eP45dhrDNM4": "100000",
+          "sdlgGZVeeUaLALNuXHwijQkBTDAj6LVZMqeaeaSRt89u7RcXwf4CF": "100000",
+          "sdlg9ZNvduP2uehsQ7fsXHTa75bYMz78vP2CHhaR3Q3B1XLXcc9Zf": "1000000",
+          "sdlg2onJzRMuYL5sbc1MDojt2vx3YXyeRJVH1rJeSbuVv97CDegcCz": "1000000",
+          "sdlgFrsgiJqRBsZZQXHZMGjLJSw8KmxruPqtNTt8cYcNixYxFgdgb": "1000000"
+        }
+      }
+    }

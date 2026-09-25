@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validator-0
+  namespace: "2023241041"
+  labels:
+    app: sdlg-jam
+    node: validator-0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sdlg-jam
+      node: validator-0
+  template:
+    metadata:
+      labels:
+        app: sdlg-jam
+        node: validator-0
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: node
+          image: arelyxl/sdlg-jam:0.1.1
+          imagePullPolicy: Always
+          args: ["start", "--node", "validator-0"]
+          env:
+            - name: JAM_NETWORK
+              value: sdlg-jam
+            - name: JAM_GENESIS
+              value: /app/genesis/genesis.json
+            - name: JAM_WALLET_DIR
+              value: /app/wallets
+            - name: JAM_DATA_DIR
+              value: /app/data
+            - name: JAM_LISTEN_ALL
+              value: "true"
+            - name: JAM_TIMESLOT_SECS
+              value: "6"
+            - name: JAM_P2P_PORT
+              value: "30334"
+            - name: JAM_RPC_PORT
+              value: "9944"
+            - name: JAM_API_PORT
+              value: "8080"
+            - name: JAM_EVM_PORT
+              value: "8545"
+            - name: JAM_SEED_PEERS
+              value: ""
+            - name: JAM_LOG_LEVEL
+              value: info
+          ports:
+            - { name: p2p, containerPort: 30334, protocol: TCP }
+            - { name: rpc, containerPort: 9944, protocol: TCP }
+            - { name: api, containerPort: 8080, protocol: TCP }
+            - { name: evm, containerPort: 8545, protocol: TCP }
+          readinessProbe:
+            tcpSocket: { port: 9944 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 9944 }
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 225Mi
+          volumeMounts:
+            - { name: genesis, mountPath: /app/genesis/genesis.json, subPath: genesis.json }
+            - { name: wallets, mountPath: /app/wallets }
+            - { name: data, mountPath: /app/data }
+      volumes:
+        - name: genesis
+          configMap:
+            name: sdlg-genesis
+        - name: wallets
+          configMap:
+            name: sdlg-wallets
+            defaultMode: 0444
+        - name: data
+          persistentVolumeClaim:
+            claimName: data-validator-0

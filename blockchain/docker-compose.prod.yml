@@ -1,0 +1,113 @@
+name: sdlg-jam-prod
+
+# Despliegue para SERVIDOR autohosteado (produccion).
+# Solo validator-0 expone RPC (9944) y API economica (8080); los demas
+# solo hablan p2p interno. Proteja 80/443 con un reverse proxy (Caddy/nginx).
+#
+# Ejemplo en un servidor:
+#   git clone <repo> && cd blockchain
+#   npm ci && npm run build
+#   node dist/cli/main.js init --validators 4 --users 5 --out ./genesis \
+#       --seed ws://validator-0:30334
+#   sudo docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  validator-0:
+    build: .
+    image: sdlg-jam:0.1.0
+    container_name: sdlg-val-0
+    command: ["start", "--node", "validator-0"]
+    environment:
+      JAM_NETWORK: sdlg-jam
+      JAM_GENESIS: /app/genesis/genesis.json
+      JAM_WALLET_DIR: /app/wallets
+      JAM_DATA_DIR: /app/data
+      JAM_LISTEN_ALL: "true"
+      JAM_TIMESLOT_SECS: "6"
+      JAM_P2P_PORT: "30334"
+      JAM_RPC_PORT: "9944"
+      JAM_API_PORT: "8080"
+      JAM_LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:30334:30334"   # p2p interno (proxie si quiere p2p publico)
+      - "127.0.0.1:9944:9944"     # json-rpc SOLO loopback
+      - "127.0.0.1:8080:8080"     # economia API SOLO loopback
+    volumes:
+      - ./genesis:/app/genesis:ro
+      - ./wallets:/app/wallets:ro
+      - ./data/v0:/app/data
+    restart: always
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  validator-1:
+    image: sdlg-jam:0.1.0
+    depends_on: [validator-0]
+    command: ["start", "--node", "validator-1"]
+    environment:
+      JAM_NETWORK: sdlg-jam
+      JAM_GENESIS: /app/genesis/genesis.json
+      JAM_WALLET_DIR: /app/wallets
+      JAM_DATA_DIR: /app/data
+      JAM_LISTEN_ALL: "true"
+      JAM_TIMESLOT_SECS: "6"
+      JAM_P2P_PORT: "30335"
+      JAM_RPC_PORT: "9945"
+      JAM_API_PORT: "8081"
+      JAM_SEED_PEERS: ws://validator-0:30334
+    ports:
+      - "127.0.0.1:30335:30335"
+    volumes:
+      - ./genesis:/app/genesis:ro
+      - ./wallets:/app/wallets:ro
+      - ./data/v1:/app/data
+    restart: always
+
+  validator-2:
+    image: sdlg-jam:0.1.0
+    depends_on: [validator-0]
+    command: ["start", "--node", "validator-2"]
+    environment:
+      JAM_NETWORK: sdlg-jam
+      JAM_GENESIS: /app/genesis/genesis.json
+      JAM_WALLET_DIR: /app/wallets
+      JAM_DATA_DIR: /app/data
+      JAM_LISTEN_ALL: "true"
+      JAM_TIMESLOT_SECS: "6"
+      JAM_P2P_PORT: "30336"
+      JAM_RPC_PORT: "9946"
+      JAM_API_PORT: "8082"
+      JAM_SEED_PEERS: ws://validator-0:30334
+    ports:
+      - "127.0.0.1:30336:30336"
+    volumes:
+      - ./genesis:/app/genesis:ro
+      - ./wallets:/app/wallets:ro
+      - ./data/v2:/app/data
+    restart: always
+
+  validator-3:
+    image: sdlg-jam:0.1.0
+    depends_on: [validator-0]
+    command: ["start", "--node", "validator-3"]
+    environment:
+      JAM_NETWORK: sdlg-jam
+      JAM_GENESIS: /app/genesis/genesis.json
+      JAM_WALLET_DIR: /app/wallets
+      JAM_DATA_DIR: /app/data
+      JAM_LISTEN_ALL: "true"
+      JAM_TIMESLOT_SECS: "6"
+      JAM_P2P_PORT: "30337"
+      JAM_RPC_PORT: "9947"
+      JAM_API_PORT: "8083"
+      JAM_SEED_PEERS: ws://validator-0:30334
+    ports:
+      - "127.0.0.1:30337:30337"
+    volumes:
+      - ./genesis:/app/genesis:ro
+      - ./wallets:/app/wallets:ro
+      - ./data/v3:/app/data
+    restart: always

@@ -1,0 +1,215 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validator-1
+  namespace: "2023241041"
+  labels:
+    app: sdlg-jam
+    node: validator-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sdlg-jam
+      node: validator-1
+  template:
+    metadata:
+      labels:
+        app: sdlg-jam
+        node: validator-1
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: node
+          image: arelyxl/sdlg-jam:0.1.1
+          imagePullPolicy: Always
+          args: ["start", "--node", "validator-1"]
+          env:
+            - { name: JAM_NETWORK, value: sdlg-jam }
+            - { name: JAM_GENESIS, value: /app/genesis/genesis.json }
+            - { name: JAM_WALLET_DIR, value: /app/wallets }
+            - { name: JAM_DATA_DIR, value: /app/data }
+            - { name: JAM_LISTEN_ALL, value: "true" }
+            - { name: JAM_TIMESLOT_SECS, value: "6" }
+            - { name: JAM_P2P_PORT, value: "30335" }
+            - { name: JAM_RPC_PORT, value: "9945" }
+            - { name: JAM_API_PORT, value: "8081" }
+            - { name: JAM_EVM_PORT, value: "8546" }
+            - { name: JAM_SEED_PEERS, value: "ws://sdlg-jam-validator-0.2023241041.svc.cluster.local:30334" }
+            - { name: JAM_LOG_LEVEL, value: info }
+          ports:
+            - { name: p2p, containerPort: 30335, protocol: TCP }
+            - { name: rpc, containerPort: 9945, protocol: TCP }
+            - { name: api, containerPort: 8081, protocol: TCP }
+            - { name: evm, containerPort: 8546, protocol: TCP }
+          readinessProbe:
+            tcpSocket: { port: 9945 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 9945 }
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 225Mi }
+          volumeMounts:
+            - { name: genesis, mountPath: /app/genesis/genesis.json, subPath: genesis.json }
+            - { name: wallets, mountPath: /app/wallets }
+            - { name: data, mountPath: /app/data }
+      volumes:
+        - name: genesis
+          configMap:
+            name: sdlg-genesis
+        - name: wallets
+          configMap:
+            name: sdlg-wallets
+            defaultMode: 0444
+        - name: data
+          persistentVolumeClaim:
+            claimName: data-validator-1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validator-2
+  namespace: "2023241041"
+  labels:
+    app: sdlg-jam
+    node: validator-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sdlg-jam
+      node: validator-2
+  template:
+    metadata:
+      labels:
+        app: sdlg-jam
+        node: validator-2
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: node
+          image: arelyxl/sdlg-jam:0.1.1
+          imagePullPolicy: Always
+          args: ["start", "--node", "validator-2"]
+          env:
+            - { name: JAM_NETWORK, value: sdlg-jam }
+            - { name: JAM_GENESIS, value: /app/genesis/genesis.json }
+            - { name: JAM_WALLET_DIR, value: /app/wallets }
+            - { name: JAM_DATA_DIR, value: /app/data }
+            - { name: JAM_LISTEN_ALL, value: "true" }
+            - { name: JAM_TIMESLOT_SECS, value: "6" }
+            - { name: JAM_P2P_PORT, value: "30336" }
+            - { name: JAM_RPC_PORT, value: "9946" }
+            - { name: JAM_API_PORT, value: "8082" }
+            - { name: JAM_EVM_PORT, value: "8547" }
+            - { name: JAM_SEED_PEERS, value: "ws://sdlg-jam-validator-0.2023241041.svc.cluster.local:30334" }
+            - { name: JAM_LOG_LEVEL, value: info }
+          ports:
+            - { name: p2p, containerPort: 30336, protocol: TCP }
+            - { name: rpc, containerPort: 9946, protocol: TCP }
+            - { name: api, containerPort: 8082, protocol: TCP }
+            - { name: evm, containerPort: 8547, protocol: TCP }
+          readinessProbe:
+            tcpSocket: { port: 9946 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 9946 }
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 225Mi }
+          volumeMounts:
+            - { name: genesis, mountPath: /app/genesis/genesis.json, subPath: genesis.json }
+            - { name: wallets, mountPath: /app/wallets }
+            - { name: data, mountPath: /app/data }
+      volumes:
+        - name: genesis
+          configMap:
+            name: sdlg-genesis
+        - name: wallets
+          configMap:
+            name: sdlg-wallets
+            defaultMode: 0444
+        - name: data
+          persistentVolumeClaim:
+            claimName: data-validator-2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validator-3
+  namespace: "2023241041"
+  labels:
+    app: sdlg-jam
+    node: validator-3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sdlg-jam
+      node: validator-3
+  template:
+    metadata:
+      labels:
+        app: sdlg-jam
+        node: validator-3
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: node
+          image: arelyxl/sdlg-jam:0.1.1
+          imagePullPolicy: Always
+          args: ["start", "--node", "validator-3"]
+          env:
+            - { name: JAM_NETWORK, value: sdlg-jam }
+            - { name: JAM_GENESIS, value: /app/genesis/genesis.json }
+            - { name: JAM_WALLET_DIR, value: /app/wallets }
+            - { name: JAM_DATA_DIR, value: /app/data }
+            - { name: JAM_LISTEN_ALL, value: "true" }
+            - { name: JAM_TIMESLOT_SECS, value: "6" }
+            - { name: JAM_P2P_PORT, value: "30337" }
+            - { name: JAM_RPC_PORT, value: "9947" }
+            - { name: JAM_API_PORT, value: "8083" }
+            - { name: JAM_EVM_PORT, value: "8548" }
+            - { name: JAM_SEED_PEERS, value: "ws://sdlg-jam-validator-0.2023241041.svc.cluster.local:30334" }
+            - { name: JAM_LOG_LEVEL, value: info }
+          ports:
+            - { name: p2p, containerPort: 30337, protocol: TCP }
+            - { name: rpc, containerPort: 9947, protocol: TCP }
+            - { name: api, containerPort: 8083, protocol: TCP }
+            - { name: evm, containerPort: 8548, protocol: TCP }
+          readinessProbe:
+            tcpSocket: { port: 9947 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 9947 }
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 225Mi }
+          volumeMounts:
+            - { name: genesis, mountPath: /app/genesis/genesis.json, subPath: genesis.json }
+            - { name: wallets, mountPath: /app/wallets }
+            - { name: data, mountPath: /app/data }
+      volumes:
+        - name: genesis
+          configMap:
+            name: sdlg-genesis
+        - name: wallets
+          configMap:
+            name: sdlg-wallets
+            defaultMode: 0444
+        - name: data
+          persistentVolumeClaim:
+            claimName: data-validator-3

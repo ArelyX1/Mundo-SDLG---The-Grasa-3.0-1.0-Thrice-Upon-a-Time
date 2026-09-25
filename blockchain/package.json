@@ -1,0 +1,32 @@
+{
+  "name": "sdlg-jam",
+  "version": "0.1.0",
+  "description": "Red blockchain JAM (Join-Accumulate Machine) auto-alojada: nodos, servicios y economía PAPUCOIN (SDLG)",
+  "type": "module",
+  "bin": {
+    "jam-node": "dist/main.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli/main.js",
+    "dev": "tsx src/cli/main.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@ethereumjs/rlp": "^10.1.3",
+    "@noble/curves": "^2.4.0",
+    "@noble/ed25519": "^2.2.1",
+    "@noble/hashes": "^1.6.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
