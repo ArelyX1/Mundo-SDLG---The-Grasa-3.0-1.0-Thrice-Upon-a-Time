@@ -10,7 +10,37 @@ proyecto, cada uno con su historia y su ciclo de vida.
 | [`node-go/`](node-go) | Nodo JAM en Go | Fork de [`eigerco/strawberry`](https://github.com/eigerco/strawberry) (Gray Paper v0.7.2). Nodo completo: Safrole, PVM, cores, erasure coding. Incluye el **SDK de services** en `node-go/sdk/`. |
 | [`node-ts/`](node-ts) | Nodo JAM en TypeScript | Nodo ligero, paquete npm `sdlg-jam`. Modelo de servicios del Gray Paper sin Substrate. Incluye la **gateway `eth_*` para MetaMask**. |
 | [`deploy/k8s/`](deploy/k8s) | Despliegue | Manifiestos e infraestructura de Kubernetes para `node-ts` en un clúster. |
-| [`references/`](references) | Referencias | Repos de terceros clonados solo para consulta. No se versionan. Ver su [README](references/README.md). |
+| [`references/`](references) | Referencias | Repos de terceros solo para consulta. Ver su [README](references/README.md). |
+
+## Replicar en otra máquina
+
+`node-go` y `references/*` son **submódulos**: la raíz no guarda su código,
+guarda el commit exacto al que apunta cada uno. Por eso clonar la raíz sin
+`--recurse-submodules` te deja sin nodo de Go.
+
+```sh
+git clone --recurse-submodules https://github.com/ArelyX1/Mundo-SDLG---The-Grasa-3.0-1.0-Thrice-Upon-a-Time.git
+cd Mundo-SDLG---The-Grasa-3.0-1.0-Thrice-Upon-a-Time
+./scripts/bootstrap.sh
+./scripts/verify.sh
+```
+
+`bootstrap.sh` deja la máquina lista: sincroniza el workspace de Go, instala
+las dependencias de npm y fija `GOTMPDIR`, que el linker de Go necesita
+apuntar al disco real porque el tmpfs de `/tmp` no aguanta un build pesado.
+`verify.sh` comprueba que nada falte y sale con `1` si algo se rompió; sirve
+también en CI.
+
+Para actualizar un submódulo hay que commitear **dos** veces, primero dentro
+del submódulo y luego en la raíz para mover el puntero:
+
+```sh
+cd node-go && git commit ... && git push
+cd .. && git add node-go && git commit -m "bump node-go"
+```
+
+Las referencias no hacen falta para levantar la red, solo para consultarlas, y
+son ~100 MB. `bootstrap.sh` las omite salvo que pidas `--with-references`.
 
 ## Los dos nodos
 

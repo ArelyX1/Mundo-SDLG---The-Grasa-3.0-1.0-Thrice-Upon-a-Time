@@ -5,11 +5,6 @@ dist/
 .env
 .DS_Store
 
-# El nodo Go es un fork de eigerco/strawberry y conserva su propio historial
-# git para que los merges de upstream sigan siendo posibles. Es un repositorio
-# anidado, versionado por separado desde node-go/.git.
-node-go/
+# node-go/ y references/ son submódulos: se registran como gitlinks y quedan
+# fijados al commit exacto en .gitmodules. No se ignoran.
 
-# Repos de terceros clonados solo como material de referencia: no forman parte
-# del proyecto y no se versionan. Ver references/README.md.
-references/

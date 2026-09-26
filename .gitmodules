@@ -1,0 +1,12 @@
+[submodule "node-go"]
+	path = node-go
+	url = https://github.com/ArelyX1/strawberry-jam.git
+[submodule "references/dcrd"]
+	path = references/dcrd
+	url = https://github.com/decred/dcrd.git
+[submodule "references/polkavm"]
+	path = references/polkavm
+	url = https://github.com/paritytech/polkavm.git
+[submodule "references/ajanta"]
+	path = references/ajanta
+	url = https://github.com/Chainscore/ajanta.git
