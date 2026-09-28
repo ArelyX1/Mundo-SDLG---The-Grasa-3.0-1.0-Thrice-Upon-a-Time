@@ -16,6 +16,8 @@ export interface NodeConfig {
   rpcPort: number
   apiPort: number
   evmPort: number
+  /** The node that owns the chain. The EVM surface is a door onto it. */
+  upstream: string
   seedPeers: string[]
   listenAll: boolean
   timeslotSecs: number
@@ -40,6 +42,7 @@ export function loadConfig(overrides: Partial<NodeConfig> = {}): NodeConfig {
     rpcPort: parseInt(env('JAM_RPC_PORT') ?? '9944', 10),
     apiPort: parseInt(env('JAM_API_PORT') ?? '8080', 10),
     evmPort: parseInt(env('JAM_EVM_PORT') ?? '8545', 10),
+    upstream: env('JAM_UPSTREAM_RPC') ?? 'http://127.0.0.1:9944',
     seedPeers: (env('JAM_SEED_PEERS') ?? '')
       .split(',')
       .map((s) => s.trim())

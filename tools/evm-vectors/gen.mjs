@@ -55,10 +55,10 @@ function signLegacy() {
   return { type: 0, raw: '0x' + Buffer.from(raw).toString('hex'), sigHash: '0x' + Buffer.from(sigHash).toString('hex') }
 }
 
-function signTyped(type) {
+function signTyped(type, txNonce = nonce) {
   const unsigned = type === 2
-    ? [CHAIN_ID, nonce, 10n ** 9n, 20n * 10n ** 9n, gas, to, value, new Uint8Array(0), []]
-    : [CHAIN_ID, nonce, 20n * 10n ** 9n, gas, to, value, new Uint8Array(0), []]
+    ? [CHAIN_ID, txNonce, 10n ** 9n, 20n * 10n ** 9n, gas, to, value, new Uint8Array(0), []]
+    : [CHAIN_ID, txNonce, 20n * 10n ** 9n, gas, to, value, new Uint8Array(0), []]
   const sigHash = keccak_256(Uint8Array.from([type, ...RLP.encode(unsigned)]))
   const sig = secp256k1.sign(sigHash, privKey, { prehash: false })
   const parity = parityOf(sig, sigHash)
@@ -69,6 +69,11 @@ function signTyped(type) {
 out.txs.push(signLegacy())
 out.txs.push(signTyped(1))
 out.txs.push(signTyped(2))
+
+// La primera transaccion de una cuenta nueva: nonce 0, que es lo que una
+// billetera que nunca ha enviado envia, y lo que un servicio con proteccion de
+// replay tiene que aceptar de una cuenta sin historial.
+out.firstSend = signTyped(2, 0n)
 
 // Vector con s alto (malleable) para comprobar que se rechaza.
 {

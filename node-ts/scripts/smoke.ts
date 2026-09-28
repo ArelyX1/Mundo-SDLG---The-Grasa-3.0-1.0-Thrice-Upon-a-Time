@@ -1,151 +1,157 @@
-import assert from 'node:assert'
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
+// Smoke de lo que existe: la cadena de node-go y la puerta EVM de este repo.
+//
+// La prueba levanta el nodo de Go de verdad, le habla por la puerta como lo haria
+// una billetera, y comprueba que un saldo que se lee aqui es el mismo saldo que la
+// cadena commiteo, y que una transaccion firmada por una clave que el nodo nunca
+// vio mueve ese mismo saldo. Si algo de esto pasa, la red no funciona.
+import assert from 'node:assert/strict'
+import { spawn, spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { runInit } from '../src/cli/init.js'
-import { loadGenesis } from '../src/genesis.js'
-import { JamNode } from '../src/engine.js'
-import { WalletStore } from '../src/wallet.js'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createEvmServer } from '../src/api/evm.js'
 import { maybeLogger } from '../src/core/log.js'
-import { createRpcServer } from '../src/rpc/jsonrpc.js'
-import { createApiServer } from '../src/api/economy.js'
-import { addressFromPublicKey } from '../src/core/crypto.js'
-import type { Server } from 'node:http'
 
-const DIR = mkdtempSync(join(tmpdir(), 'sdlg-smoke-'))
+const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO = join(HERE, '..', '..')
+const NODE_GO = join(REPO, 'node-go')
+const GENESIS = join(REPO, 'genesis', 'chain-dev.json')
+const DIR = mkdtempSync(join(tmpdir(), 'sdlg-gateway-'))
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-async function main(): Promise<void> {
-  console.log('=== Smoke: red SDLG-JAM multi-nodo (P2P real) ===')
-  rmSync(DIR, { recursive: true, force: true })
+// Una transaccion EIP-1559 firmada por una clave que este repo no tiene, generada
+// por tools/evm-vectors con una implementacion independiente. Nonce 0, 5 PAPU, para
+// la direccion 0x3535..., que es lo que manda una billetera que nunca ha enviado.
+const SIGNER = '0x718fae2e5c6ba915a210b7f6e85246db915b9c03'
+const RECEIVER = '0x3535353535353535353535353535353535353535'
+const RAW_TX =
+  '0x02f87582140080843b9aca008504a817c800825208943535353535353535353535353535353535353535884563918244f4000080c080a0102ad6d79c7e6f3dee16db944ff8a8f2c13c7777164a1d36e5b739327758a8dda06b875f8181ba400635cf14f37d1432d0d5abacfbc3d5753397171205550607fd'
 
-  const result = runInit({
-    network: 'sdlg-smoke',
-    outDir: join(DIR, 'genesis'),
-    validators: 4,
-    users: 2,
-    timeslotSecs: 1,
-    cores: 1,
-    seedPeers: ['ws://127.0.0.1:41334'],
-    maxSupply: '1000000000',
-    issuerBalance: '700000000',
-    validatorBalance: '100000',
-    userBalance: '1000000',
+const PORT = 51544
+const GATEWAY_PORT = 51545
+
+type Answer = { result?: unknown; error?: { message: string } }
+
+async function rpc(port: number, method: string, params: unknown[] = []): Promise<Answer> {
+  const response = await fetch(`http://127.0.0.1:${port}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   })
-  const genesis = loadGenesis(join(DIR, 'genesis', 'genesis.json'))
-  const wallets = new WalletStore(join(DIR, 'wallets'))
-
-  const nodes: JamNode[] = []
-  const servers: Server[] = []
-  for (let i = 0; i < 4; i++) {
-    const name = `validator-${i}`
-    const cfg = {
-      network: genesis.network,
-      nodeName: name,
-      dataDir: join(DIR, 'data', name),
-      genesisPath: join(DIR, 'genesis', 'genesis.json'),
-      walletDir: join(DIR, 'wallets'),
-      p2pPort: 41334 + i,
-      rpcPort: 49944 + i,
-      apiPort: 48080 + i,
-      seedPeers: i === 0 ? [] : ['ws://127.0.0.1:41334'],
-      listenAll: false,
-      timeslotSecs: 1,
-      logLevel: 'info',
-    }
-    const log = maybeLogger('warn', name)
-    const node = new JamNode(cfg, genesis, log)
-    const wallet = wallets.get(name)
-    await node.boot({ secretHex: wallet?.secretKey })
-    servers.push(createRpcServer(node, log, cfg.rpcPort))
-    servers.push(createApiServer(node, wallets, genesis, log, cfg.apiPort))
-    nodes.push(node)
-  }
-
-  console.log('nodos arrancados, esperando consenso sobre los primeros slots...')
-  const deadline = Date.now() + 40_000
-  while (Date.now() < deadline) {
-    await sleep(500)
-    const heads = nodes.map((n) => n.head.header.timeslot)
-    if (Math.min(...heads) >= 8) break
-  }
-  const heads = nodes.map((n) => n.head.header.timeslot)
-  console.log('cabezas:', heads)
-  assert.ok(Math.min(...heads) >= 8, 'la red no avanzo lo suficiente')
-
-  const headsHash = nodes.map((n) => n.head.hash)
-  assert.equal(new Set(headsHash).size, 1, `los nodos divergieron en la cabeza: ${headsHash.join(', ')}`)
-  assert.deepEqual(
-    nodes.map((n) => n.state.root()),
-    nodes.map((n) => n.state.root()),
-    'los estados deben coincidir (mismo accumulate)',
-  )
-  console.log('consenso ok: head común', headsHash[0]!.slice(0, 16), '(estados idénticos)')
-
-  const bridge = wallets.get('bridge')!
-  const issuer = wallets.get('issuer')!
-
-  console.log('--- mint del issuer en favor de bridge ---')
-  const api0 = `http://127.0.0.1:48080`
-  const mintRes = await fetch(`${api0}/economy/mint`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ wallet: 'issuer', to: bridge.address, amount: '250000' }),
-  }).then((r) => r.json())
-  console.log('mint ->', JSON.stringify(mintRes))
-  assert.equal(mintRes.accepted, true)
-
-  console.log('--- transfer issuer -> bridge (1.000 SDLG) ---')
-  const tx = await fetch(`${api0}/economy/transfer`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ wallet: 'issuer', to: bridge.address, amount: '1000', memo: 'hola mundo SDLG' }),
-  }).then((r) => r.json())
-  console.log('transfer ->', JSON.stringify(tx))
-  assert.equal(tx.accepted, true)
-
-  console.log('--- faucet bridge ---')
-  const faucet = await fetch(`${api0}/economy/faucet`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ wallet: 'bridge' }),
-  }).then((r) => r.json())
-  console.log('faucet ->', JSON.stringify(faucet))
-  assert.equal(faucet.accepted, true)
-
-  // esperar a que entren en bloques
-  await sleep(2_500)
-
-  const b1 = await fetch(`${api0}/economy/balance`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: bridge.address }) }).then((r) => r.json())
-  console.log('saldo bridge tras todo:', b1)
-
-  const rpc0 = new URL(`${api0}/`)
-  void rpc0
-  const rpc = 'http://127.0.0.1:49944'
-  const netInfo = await fetch(rpc, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'system_health' }),
-  }).then((r) => r.json())
-  console.log('health:', JSON.stringify(netInfo))
-  assert.ok(netInfo.result?.peers >= 3, 'esperaba >= 3 peers en un nodo')
-
-  const supply = await fetch(rpc, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'papucoin_getSupply' }),
-  }).then((r) => r.json())
-  console.log('supply:', JSON.stringify(supply))
-
-  // cierre limpio
-  for (const n of nodes) n.shutdown()
-  for (const s of servers) s.close()
-  console.log('SMOKE OK ✓')
-  rmSync(DIR, { recursive: true, force: true })
-  process.exit(0)
+  return (await response.json()) as Answer
 }
 
-main().catch((e) => {
-  console.error('SMOKE FAIL:', e)
-  process.exit(1)
-})
+/** Waits for a balance to be what it should be, because work lands on a timeslot. */
+async function balanceOf(port: number, address: string, want: bigint, what: string): Promise<void> {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const answer = await rpc(port, 'eth_getBalance', [address, 'latest'])
+    if (answer.result !== undefined && BigInt(answer.result as string) === want) return
+    await sleep(1000)
+  }
+  const answer = await rpc(port, 'eth_getBalance', [address, 'latest'])
+  assert.fail(`${what}: la puerta nunca llego a ${want}, y la cadena dice ${String(answer.result ?? answer.error?.message)}`)
+}
+
+async function main(): Promise<void> {
+  console.log('=== Smoke: cadena node-go + puerta EVM ===')
+  rmSync(DIR, { recursive: true, force: true })
+
+  if (!existsSync(join(NODE_GO, 'go.mod'))) {
+    console.log('no hay node-go al lado; este smoke necesita el repositorio completo')
+    process.exit(1)
+  }
+
+  console.log('--- compilando el nodo de Go ---')
+  const build = spawnSync('go', ['build', '-tags', 'dev', '-o', join(DIR, 'strawberry'), './cmd/strawberry'], {
+    cwd: NODE_GO,
+    encoding: 'utf8',
+  })
+  if (build.status !== 0) {
+    console.error(build.stderr)
+    process.exit(1)
+  }
+
+  console.log('--- levantando la cadena ---')
+  const node = spawn(join(DIR, 'strawberry'), [
+    '--data-dir', join(DIR, 'chain'),
+    '--rpc-port', String(PORT),
+    '--bridge-wallet', '01'.repeat(32),
+    '--port', String(PORT + 100),
+    '--validator', `0@127.0.0.1:${PORT + 100}`,
+    // El nodo lee su appconfig.json del directorio de trabajo, como siempre.
+  ], { stdio: ['ignore', 'inherit', 'inherit'], cwd: NODE_GO })
+
+  const gateway = createEvmServer(`http://127.0.0.1:${PORT}`, maybeLogger('warn', 'smoke'), GATEWAY_PORT)
+
+  const stop = (): void => {
+    gateway.closeAllConnections()
+    gateway.close()
+    node.kill('SIGKILL')
+    rmSync(DIR, { recursive: true, force: true })
+  }
+  process.on('exit', stop)
+
+  try {
+    // El nodo responde antes de producir su primer bloque, asi que esperar por el
+    // chainId no dice que la cadena este viva: hay que verla avanzar.
+    let alive = false
+    for (let attempt = 0; attempt < 40 && !alive; attempt++) {
+      const answer = await rpc(GATEWAY_PORT, 'eth_blockNumber')
+      alive = answer.result !== undefined && Number(answer.result) > 0
+      if (!alive) await sleep(1000)
+    }
+    assert.ok(alive, 'la cadena no produjo ningun bloque')
+
+    console.log('--- la puerta presenta la red ---')
+    assert.equal((await rpc(GATEWAY_PORT, 'eth_chainId')).result, '0x1400', 'chainId 5120 en hex')
+    assert.equal((await rpc(GATEWAY_PORT, 'net_version')).result, '5120')
+    assert.equal((await rpc(GATEWAY_PORT, 'eth_gasPrice')).result, '0x0', 'esta cadena no cobra gas')
+
+    const first = Number((await rpc(GATEWAY_PORT, 'eth_blockNumber')).result as string)
+    await sleep(8000)
+    const second = Number((await rpc(GATEWAY_PORT, 'eth_blockNumber')).result as string)
+    assert.ok(second > first, `la cadena tiene que avanzar: ${first} -> ${second}`)
+
+    console.log('--- el faucet de la cadena paga a una direccion EVM ---')
+    const faucet = (await (
+      await fetch(`http://127.0.0.1:${GATEWAY_PORT}/evm/faucet`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ address: SIGNER }),
+      })
+    ).json()) as { accepted: boolean; amount: string }
+    assert.equal(faucet.accepted, true)
+    assert.equal(faucet.amount, '10000', 'el faucet paga lo que dice el genesis')
+    await balanceOf(GATEWAY_PORT, SIGNER, 10_000n * 10n ** 18n, 'el faucet')
+
+    console.log('--- una transaccion firmada por una clave desconocida mueve el saldo ---')
+    const send = await rpc(GATEWAY_PORT, 'eth_sendRawTransaction', [RAW_TX])
+    assert.ok(send.result, `la transaccion no se acepto: ${send.error?.message ?? ''}`)
+    await balanceOf(GATEWAY_PORT, RECEIVER, 5n * 10n ** 18n, 'el destino de la transaccion')
+
+    // Lo que el faucet.multiplo le queda al remitente: el faucet menos lo enviado
+    // menos la comision de la cadena. Son 0.000001 PAPU en unidades de la cadena,
+    // que son 10^12 wei porque el wei tiene seis decimales mas que el PAPU.
+    const FEE_WEI = 1_000_000n * 10n ** 6n
+    const left = BigInt((await rpc(GATEWAY_PORT, 'eth_getBalance', [SIGNER, 'latest'])).result as string)
+    assert.equal(left, 10_000n * 10n ** 18n - 5n * 10n ** 18n - FEE_WEI,
+      'al remitente le queda el faucet menos el envio y la comision')
+
+    console.log('--- lo que la cadena no puede hacer, lo dice ---')
+    const call = await rpc(GATEWAY_PORT, 'eth_call', [{ to: RECEIVER, data: '0x70a08231' }])
+    assert.equal(call.result, undefined)
+    assert.match(call.error?.message ?? '', /does not run contract code/,
+      'el error tiene que decir que no hay codigo de contratos, no fallar sin decir por que')
+    assert.equal((await rpc(GATEWAY_PORT, 'eth_getTransactionReceipt', ['0xdead'])).result, null)
+
+    console.log('\nOK: la cadena de node-go responde, y la puerta no le anade nada.')
+    stop()
+    process.exit(0)
+  } catch (e) {
+    console.error('\nSMOKE FAIL:', e instanceof Error ? e.message : e)
+    process.exitCode = 1
+  }
+}
+
+void main()

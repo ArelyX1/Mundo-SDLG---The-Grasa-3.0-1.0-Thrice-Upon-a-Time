@@ -42,14 +42,34 @@ cd .. && git add node-go && git commit -m "bump node-go"
 Las referencias no hacen falta para levantar la red, solo para consultarlas, y
 son ~100 MB. `bootstrap.sh` las omite salvo que pidas `--with-references`.
 
-## Los dos nodos
+## Quién es la cadena
 
-`node-go` y `node-ts` son **dos implementaciones del mismo protocolo**, no un
-legacy y su reemplazo. `node-go` es el camino a un nodo completo; `node-ts` es
-el que se despliega hoy y el que expone la gateway de MetaMask. Comparten la
-especificación, no el código: la lógica de servicios está escrita dos veces
-(una en TypeScript, otra en Go dentro del SDK) porque el Gray Paper no define
-un lenguaje, y portar la lógica a los dos es parte del trabajo.
+Hay **una sola cadena**, y vive en `node-go`. `node-ts` es una puerta: expone
+la superficie que MetaMask espera y reenvía cada pregunta al nodo por JSON-RPC.
+No tiene claves privadas, no guarda bloques, no firma items y no tiene opinión
+sobre un saldo. Ese es el motivo de que sea una puerta y no un nodo: un saldo
+que se contesta desde dos sitios es un saldo que algún día se contradice.
+
+```bash
+# 1. la cadena
+cd node-go && go run -tags dev ./cmd/strawberry \
+  --data-dir ./data --rpc-port 9944 \
+  --bridge-wallet 01...01 --validator 0@127.0.0.1:30334
+
+# 2. la puerta que habla con MetaMask
+cd node-ts && npm run dev -- gateway --upstream http://127.0.0.1:9944 --evm 8545
+```
+
+`npm run smoke` levanta las dos y comprueba el recorrido entero: la cadena
+produce bloques, el faucet paga a una dirección `0x`, y una transacción firmada
+por una clave que el nodo nunca vio mueve ese mismo saldo. `scripts/verify.sh`
+comprueba lo mismo sin servidor a la vista (`VERIFY_CHAIN=0` se salta la parte
+que tarda).
+
+`node-ts` conserva un `start` con su propia cadena de laboratorio para familiarizarse
+con el protocolo, y no es lo que se despliega: el genesis, la economía y el
+estado que importan son los de `node-go/genesis/chain-dev.json`, generado con
+`tools/genesis-from-ts.mjs`.
 
 **No copies lógica de un nodo al otro.** Lo que debe coincidir son los
 primitivos del protocolo: identificadores de service, claves de estado,
@@ -84,11 +104,30 @@ suministro máximo 1.000.000.000 PAPU, faucet de bienvenida y un relay EVM que
 rechaza transacciones firmadas con `s` alto y siempre debita la dirección
 recuperada de la firma, nunca la declarada.
 
-Vive en los dos nodos:
+La cadena la corre `node-go/sdk/papucoin/`, con tests contra vectores firmados
+por una implementación independiente (`tools/evm-vectors`) para no validar el
+signer contra sí mismo. `node-ts/src/services/papucoin/` se conserva como
+referencia histórica y ya no participa de la cadena.
 
-- `node-ts/src/services/papucoin/` — implementación de referencia.
-- `node-go/sdk/papucoin/` — implementación nativa, con tests de vectores
-  firmados externamente para no validar el signer contra sí mismo.
+### Cómo se mueve un saldo desde MetaMask
+
+Una billetera como MetaMask solo tiene una clave secp256k1, y el item nativo de
+la cadena va firmado con Ed25519. El puente entre las dos es la transacción
+cruda: lleva su propia firma, el servicio la recupera y toma **remitente,
+destino, monto y nonce de los bytes firmados**, no de lo que el item dice. Por
+eso una transacción no puede convertirse en un traslado desde una cuenta que el
+firmante no controla, y por eso el proceso de la puerta no necesita ninguna
+clave. El nonce de la cuenta lo lleva la cadena; el de la transacción lo lleva
+la billetera.
+
+Lo que la cadena todavía no hace, y la puerta lo dice en vez de disimularlo:
+
+- **`eth_call` no tiene respuesta honesta.** No hay PVM, así que no hay contratos
+  que ejecutar; no hay token ERC-20 que importar y `eth_getCode` responde
+  `0x`.
+- **`eth_getTransactionReceipt` responde `null`.** Los bloques llevan root y
+  timeslot, no una lista de transacciones, así que no hay índice por hash. El
+  saldo es la prueba.
 
 ## Configuración de compilación
 

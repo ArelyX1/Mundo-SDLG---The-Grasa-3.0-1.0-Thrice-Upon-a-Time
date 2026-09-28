@@ -75,6 +75,28 @@ if command -v go >/dev/null && [ -d "$ROOT/node-go" ]; then
 		bad "go build fallo (mira GOTMPDIR: el linker escribe ahi y un tmpfs pequeno lo corta)"
 fi
 
+printf '\n== Tests\n'
+# Los tests del runtime y del comando son los que comprueban que la cadena hace
+# algo: que un bloque se construye sobre el estado que el nodo dice tener, y que un
+# nodo reiniciado continua la cadena que estaba corriendo.
+if command -v go >/dev/null && [ -d "$ROOT/node-go" ]; then
+	if (cd "$ROOT/node-go" && go test -count=1 -tags dev ./pkg/devnet/ ./sdk/... >/dev/null 2>&1); then
+		ok "go test (runtime PAPU + SDK)"
+	else
+		bad "go test fallo (mira GOTMPDIR: el linker escribe ahi y un tmpfs pequeno lo corta)"
+	fi
+	if [ "${VERIFY_CHAIN:-1}" = "1" ]; then
+		# Estos levantan un nodo de verdad y esperan sus timeslots, asi que tardan
+		# mas que el resto. VERIFY_CHAIN=0 los salta cuando se quiere solo el
+		# chequeo estatico.
+		if (cd "$ROOT/node-go" && go test -count=1 -tags dev -timeout 10m ./cmd/strawberry/ >/dev/null 2>&1); then
+			ok "go test (nodo: cadena, state root, reinicio)"
+		else
+			bad "go test fallo en el comando del nodo"
+		fi
+	fi
+fi
+
 printf '\n== Espacio\n'
 avail=$(df -BG --output=avail "$ROOT" | tail -1 | tr -dc '0-9')
 if [ "${avail:-0}" -ge 5 ]; then

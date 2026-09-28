@@ -123,6 +123,8 @@ async function main(): Promise<void> {
         rpcPort: number(flags, 'rpc', parseInt(process.env.JAM_RPC_PORT ?? '9944', 10)),
         apiPort: number(flags, 'api', parseInt(process.env.JAM_API_PORT ?? '8080', 10)),
         evmPort: number(flags, 'evm', parseInt(process.env.JAM_EVM_PORT ?? '8545', 10)),
+        // La cadena que manda. Esta puerta no decide ningun bloque: lee de ahi.
+        upstream: String(flags['upstream'] ?? process.env.JAM_UPSTREAM_RPC ?? 'http://127.0.0.1:9944'),
         listenAll: flags['listen-all'] === true || flags['listen-all'] === 'true' || process.env.JAM_LISTEN_ALL === 'true',
         timeslotSecs: number(flags, 'timeslot', parseInt(process.env.JAM_TIMESLOT_SECS ?? '6', 10)),
         seedPeers: (String(flags['seed'] ?? process.env.JAM_SEED_PEERS ?? '')).split(',').map((s) => s.trim()).filter(Boolean),
@@ -141,12 +143,41 @@ async function main(): Promise<void> {
       await node.boot({ secretHex: wallet?.secretKey, p2pSeeds: cfg.seedPeers })
       createRpcServer(node, log, cfg.rpcPort)
       createApiServer(node, walletStore, genesis, log, cfg.apiPort)
-      createEvmServer(node, walletStore, log, cfg.evmPort)
+      // La superficie EVM es una puerta al nodo de node-go, no una segunda
+      // cadena: este proceso no firma niun item ni decide ningun bloque.
+      createEvmServer(cfg.upstream, log, cfg.evmPort)
 
       const shutdown = () => {
         node.shutdown()
         process.exit(0)
       }
+      process.on('SIGINT', shutdown)
+      process.on('SIGTERM', shutdown)
+      return
+    }
+
+    case 'gateway': {
+      // Solo la puerta. No hay cadena aqui, ni claves, ni validadores.
+      const upstream = String(flags['upstream'] ?? process.env.JAM_UPSTREAM_RPC ?? 'http://127.0.0.1:9944')
+      const evmPort = number(flags, 'evm', parseInt(process.env.JAM_EVM_PORT ?? '8545', 10))
+      const log = maybeLogger((String(flags['log-level'] ?? process.env.JAM_LOG_LEVEL ?? 'info')) as never, 'gateway')
+
+      try {
+        const probe = await fetch(`${upstream.replace(/\/$/, '')}/jam_getHeader`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'jam_getHeader', params: [] }),
+        })
+        if (!probe.ok) throw new Error(`HTTP ${probe.status}`)
+      } catch (e) {
+        log.error(`no se pudo hablar con el nodo en ${upstream}: ${e instanceof Error ? e.message : String(e)}`)
+        log.error('levanta node-go primero (go run -tags dev ./cmd/strawberry) o corrige --upstream')
+        process.exit(1)
+      }
+
+      createEvmServer(upstream, log, evmPort)
+      log.info(`MetaMask: agrega la red con rpc ${upstream.replace(/\/$/, '')} -> http://127.0.0.1:${evmPort}`)
+      const shutdown = () => process.exit(0)
       process.on('SIGINT', shutdown)
       process.on('SIGTERM', shutdown)
       return
