@@ -6,7 +6,7 @@
 	url = https://github.com/decred/dcrd.git
 [submodule "references/polkavm"]
 	path = references/polkavm
-	url = https://github.com/paritytech/polkavm.git
+	url = https://github.com/ArelyX1/polkavm.git
 [submodule "references/ajanta"]
 	path = references/ajanta
 	url = https://github.com/Chainscore/ajanta.git
