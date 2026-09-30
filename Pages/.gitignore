@@ -1,0 +1,6 @@
+# Dependencias y salida de compilación: se reinstalan y se reconstruyen.
+node_modules/
+dist/
+.astro/
+.DS_Store
+*.log
