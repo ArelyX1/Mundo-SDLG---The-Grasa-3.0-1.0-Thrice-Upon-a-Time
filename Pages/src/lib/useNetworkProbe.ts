@@ -58,12 +58,13 @@ export function useNetworkProbe(endpoint: string, intervalMs = 2000) {
   // Cambiar de endpoint limpia el histórico: mezclar dos redes en un gráfico no
   // significa nada.
   const changeEndpoint = useCallback((next: string) => {
+    if (next === endpointState) return;
     setEndpointState(next);
     setSamples([]);
     failures.current = 0;
     sawOnline.current = false;
     setSnap(null);
-  }, []);
+  }, [endpointState]);
 
   return { snap, samples, poll, busy, endpoint: endpointState, changeEndpoint };
 }

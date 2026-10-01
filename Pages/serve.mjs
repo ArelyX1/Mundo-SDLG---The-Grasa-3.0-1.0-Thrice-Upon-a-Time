@@ -83,6 +83,39 @@ const root = resolve(here, process.env.SERVE_DIR ?? 'dist');
 const port = Number(process.env.PORT ?? 4321);
 const rpcTarget = process.env.RPC_TARGET ?? 'http://127.0.0.1:9944';
 
+// Rango que se barre cuando no se dice cuantos nodos hay. El nodo escucha en
+// 9944 por defecto, asi que varios nodos locales seria 9944, 9945 y hacia ahi.
+const SCAN_FROM = Number(process.env.SCAN_FROM ?? 9944);
+const SCAN_TO = Number(process.env.SCAN_TO ?? 9960);
+
+/**
+ * Los nodos que este sitio puede mirar.
+ *
+ * Se declaran con NODES, separado por comas. Si no se declara nada se barren los
+ * puertos de localhost del rango, que es lo que hace util la pagina en local sin
+ * tener que configurar nada. RPC_TARGET manda sobre el primero: quien lo tenga
+ * puesto quiere ese nodo por encima de cualquier barrido.
+ */
+function configuredNodes() {
+  const list = (process.env.NODES ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (list.length > 0) return list;
+  if (process.env.RPC_TARGET) return [process.env.RPC_TARGET];
+
+  const found = [];
+  for (let p = SCAN_FROM; p <= SCAN_TO; p++) {
+    if (p === Number(process.env.PORT)) continue;
+    found.push(`http://127.0.0.1:${p}`);
+  }
+  return found;
+}
+
+const NODES = configuredNodes();
+const DEFAULT_NODE = process.env.NODE_DEFAULT ?? '0';
+
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -97,13 +130,13 @@ const types = {
   '.map': 'application/json',
 };
 
-async function proxy(req, res) {
+async function proxy(req, res, target) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   const body = chunks.length ? Buffer.concat(chunks) : undefined;
 
   try {
-    const upstream = await fetch(rpcTarget, {
+    const upstream = await fetch(target, {
       method: req.method,
       headers: { 'Content-Type': 'application/json' },
       body: body && body.length ? body : undefined,
@@ -124,7 +157,7 @@ async function proxy(req, res) {
       JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
-        error: { code: -32000, message: `nodo inaccesible en ${rpcTarget}: ${err.message}` },
+        error: { code: -32000, message: `nodo inaccesible en ${target}: ${err.message}` },
       }),
     );
   }
@@ -146,8 +179,31 @@ async function serveFile(res, filePath) {
   }
 }
 
+/** /nodes: que nodos puede mirar este sitio. Lo lee la pagina al abrirse. */
+function listNodes(res) {
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(
+    JSON.stringify({
+      nodes: NODES.map((url, i) => ({ id: String(i), url })),
+      default: DEFAULT_NODE,
+      // Se dice de donde salio la lista, porque "no hay ninguno" y "no hemos
+      // buscado" son cosas distintas y no deben verse igual.
+      source: process.env.NODES ? 'NODES' : process.env.RPC_TARGET ? 'RPC_TARGET' : 'scan',
+      scanned: `${SCAN_FROM}-${SCAN_TO}`,
+    }),
+  );
+}
+
 const server = createServer(async (req, res) => {
-  if (req.url === '/rpc') return proxy(req, res);
+  if (req.url === '/nodes') return listNodes(res);
+
+  // /rpc?node=<id> elige a que nodo va la llamada. Sin el, el de por defecto.
+  if (req.url === '/rpc' || req.url.startsWith('/rpc?')) {
+    const which = new URL(req.url, 'http://localhost').searchParams.get('node');
+    const id = which !== null && /^[0-9]+$/.test(which) ? Number(which) : Number(DEFAULT_NODE);
+    const target = NODES[id] ?? rpcTarget;
+    return proxy(req, res, target);
+  }
 
   const url = new URL(req.url, 'http://localhost');
   // normalize evita que un .. salga de dist.
@@ -170,7 +226,8 @@ server.listen(port, '127.0.0.1', () => {
   console.log(`sirviendo ${root}`);
   console.log(`  http://127.0.0.1:${port}/`);
   console.log(`  http://127.0.0.1:${port}/connect`);
-  console.log(`  /rpc -> ${rpcTarget}`);
+  console.log(`  /rpc -> ${NODES.length} nodo(s):`);
+  NODES.forEach((n, i) => console.log(`    [${i}] ${n}${String(i) === DEFAULT_NODE ? '   (por defecto)' : ''}`));
   console.log(
     envFiles.length
       ? `  config desde: ${envFiles.join(', ')}`

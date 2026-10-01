@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import NodePicker, { NodePickerBusy } from './NodePicker';
 import { Card, LogList, Metric, Nav, StateFlag } from './Ui';
 import {
   BlockHeightChart,
@@ -13,18 +14,62 @@ import {
   SupplyChart,
   UptimeStack,
 } from './Charts';
-import { DEFAULT_ENDPOINT, formatNumber, formatPapu, formatUptime } from '../lib/rpc';
+import { formatNumber, formatPapu, formatUptime } from '../lib/rpc';
+import {
+  fetchNodes,
+  pickNode,
+  probeNodes,
+  rememberNode,
+  rememberedNode,
+  rpcUrl,
+  type NodeProbe,
+} from '../lib/nodes';
 import { stallSeconds, uptimeRatio, useNetworkProbe } from '../lib/useNetworkProbe';
 import type { Sample } from '../lib/types';
 
 const MAX_LOG = 80;
 
 export default function HealthPanel() {
-  const [endpoint, setEndpoint] = useState(DEFAULT_ENDPOINT);
-  const [draft, setDraft] = useState(DEFAULT_ENDPOINT);
   const [logs, setLogs] = useState<{ at: number; text: string; kind: 'ok' | 'err' }[]>([]);
+  const [nodes, setNodes] = useState<NodeProbe[]>([]);
+  const [nodeInfo, setNodeInfo] = useState({ source: 'scan', scanned: '', ready: false });
+  const [chosen, setChosen] = useState<string | null>(null);
 
+  // El sondeo va al nodo que este elegido. Con uno solo es el de por defecto, y
+  // el hook arranca con el nodo 0 para no quedarse sin datos mientras se buscan.
+  const endpoint = chosen ? rpcUrl(chosen) : rpcUrl('0');
   const { snap, samples, poll, endpoint: active, changeEndpoint } = useNetworkProbe(endpoint);
+
+  // Busqueda de nodos al abrir. Solo se hace una vez: despues el selector manda.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const info = await fetchNodes();
+        const probes = await probeNodes(info.nodes);
+        if (!alive) return;
+        setNodes(probes);
+        setNodeInfo({ source: info.source, scanned: info.scanned, ready: true });
+        const remembered = rememberedNode(
+          info.nodes,
+          String(info.default ?? '0'),
+        );
+        const picked = pickNode(probes, remembered);
+        if (picked) setChosen(rememberedNode(info.nodes, picked.id));
+      } catch {
+        if (alive) setNodeInfo({ source: 'scan', scanned: '', ready: true });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  function chooseNode(id: string) {
+    rememberNode(id);
+    setChosen(id);
+    setLogs((prev) => [{ at: Date.now(), text: `nodo elegido: ${id}`, kind: 'ok' }, ...prev].slice(0, MAX_LOG));
+  }
 
   // El tiempo en pantalla depende del reloj del navegador, así que hay que
   // forzar un repintado aunque el RPC no haya dicho nada nuevo.
@@ -184,6 +229,21 @@ export default function HealthPanel() {
         />
       </div>
 
+      <div className="grid" style={{ marginBottom: 16 }}>
+        {nodeInfo.ready ? (
+          <NodePicker
+            nodes={nodes}
+            chosen={chosen}
+            onChoose={chooseNode}
+            busy={false}
+            source={nodeInfo.source}
+            scanned={nodeInfo.scanned}
+          />
+        ) : (
+          <NodePickerBusy />
+        )}
+      </div>
+
       <div className="grid grid-3">
         <Card title="Latencia del RPC" note="cada sondeo">
           <LatencyChart data={chart.latency} />
@@ -283,21 +343,14 @@ export default function HealthPanel() {
       </Card>
 
       <div className="grid grid-2" style={{ marginTop: 16 }}>
-        <Card title="Endpoint del RPC" note="por defecto pasa por el proxy local">
+        <Card title="Sondeo" note="todo pasa por el proxy local">
           <div className="controls">
-            <input
-              className="field"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="http://127.0.0.1:9944"
-              spellCheck={false}
-            />
-            <button className="btn" onClick={() => changeEndpoint(draft || DEFAULT_ENDPOINT)}>
-              Aplicar
-            </button>
-            <button className="btn" onClick={() => { poll(); setDraft(active); }} disabled={!snap?.reachable}>
+            <button className="btn" onClick={() => poll()} disabled={!snap?.reachable}>
               Sondear ahora
             </button>
+            <span style={{ color: 'var(--grey-dim)', fontSize: 11 }}>
+              endpoint {active}
+            </span>
           </div>
         </Card>
 

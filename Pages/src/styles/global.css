@@ -466,3 +466,63 @@ a {
   margin-bottom: 16px;
   font-size: 12.5px;
 }
+
+/* ---------- selector de nodo ---------- */
+
+.nodes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.node {
+  font: inherit;
+  text-align: left;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  color: var(--white);
+  padding: 11px 13px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.node:hover:not(:disabled) {
+  border-color: var(--red);
+}
+
+.node-on {
+  border-color: var(--red);
+  background: var(--red-deep);
+}
+
+.node:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.node-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.node-url {
+  font-size: 10.5px;
+  color: var(--grey-dim);
+}
+
+.node-meta {
+  font-size: 10.5px;
+  color: var(--grey);
+  margin-top: 2px;
+}
+
+.node-on-mark {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--red);
+  margin-top: 4px;
+}

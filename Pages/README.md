@@ -48,9 +48,39 @@ nodo daban 404 sin explicacion.
 Variables que lee:
 
 - `PORT` puerto donde escuchar, 4321 por defecto.
-- `RPC_TARGET` nodo al que reenviar `/rpc`, `http://127.0.0.1:9944` por defecto.
+- `NODES` nodos que el sitio puede mirar, separados por comas. Sin esto, se barren
+  los puertos de `SCAN_FROM` a `SCAN_TO`.
+- `RPC_TARGET` nodo de reenvio cuando no hay `NODES`, `http://127.0.0.1:9944` por
+  defecto. Si declaras `NODES`, esta variable manda solo sobre el primero.
+- `SCAN_FROM`, `SCAN_TO` rango que se barre, `9944`-`9960` por defecto.
+- `NODE_DEFAULT` nodo inicial por indice, `0` por defecto.
 - `SERVE_DIR` directorio que se sirve, `dist` por defecto.
 - `NODE_ENV` modo, `development` por defecto.
+
+## Varios nodos
+
+El sitio puede mirar mas de uno. Al abrirse los prueba todos y, si hay dos o mas
+vivos, deja elegir cual mirar. Con uno solo no aparece selector: no hay nada que
+elegir.
+
+Como declararlos:
+
+```bash
+# en el .env
+NODES=http://127.0.0.1:9944,http://127.0.0.1:9945
+```
+
+O no declarar nada y arrancar dos nodos: el sitio barre los puertos de localhost
+del rango y los encuentra solo.
+
+El nodo elegido se recuerda en el navegador, asi que recargar no pierde la
+eleccion.
+
+El sondeo va limitado a cuatro nodos a la vez a proposito. Todas las llamadas
+salen por el proxy del sitio, o sea al mismo origen, y el navegador no deja mas
+de seis conexiones por host: con dieciocho puertos por cinco llamadas cada uno,
+las ultimas expiraban por el limite del navegador y los nodos vivos se perdian
+por eso y no por estar apagados.
 
 ## Configuracion
 
@@ -109,7 +139,7 @@ El nav es el mismo en las dos, con un enlace a la otra.
 
 ### Salud
 
-Estado encendido/arrancando/apagado, tiempo encendido, disponibilidad de
+Estado encendido/arrancando/apagado, tiempo encendido, selector de nodo, disponibilidad de
 sondeos, altura de bloque, peers, latencia del RPC, oferta y máximo PAPU,
 entradas y bytes de almacenamiento, slots y epochs, cola pendiente, extrinsics,
 raíces de estado y el registro de lo que el panel ha ido viendo.
@@ -131,6 +161,12 @@ Dos detalles que costaron encontrar, por si vuelven a salir:
 - **Los dominios de los ejes arrancan en cero.** Con el automático de Recharts y
   una serie que no se mueve, el eje se ajusta al único valor y la barra ocupa
   todo el alto, que se lee como si estuviera clavada arriba.
+
+El campo "sincronizando" sale de `isSyncing` de `system_health`. Es honesto
+pero hoy no puede decir que si: el nodo lo devuelve fijo a `false` porque uno
+dev que reproduce desde genesis de forma sincrona no tiene nada que sincronizar.
+Sustituirlo por informacion real es trabajo de sincronizacion que el nodo todavia
+no hace.
 
 ### Conectar
 
