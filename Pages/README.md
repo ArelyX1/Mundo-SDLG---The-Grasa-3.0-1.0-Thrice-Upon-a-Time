@@ -40,9 +40,10 @@ npm run serve    # http://127.0.0.1:4321
 proxy a `/rpc`, porque el nodo no manda cabeceras CORS y el navegador no puede
 llamarlo desde otro origen.
 
-**Usa `serve.mjs`, no `astro preview`.** La configuración de proxy de Astro
-solo aplica a `astro dev` y devuelve 404 en `/rpc` bajo `preview`; el panel se
-queda sin datos. `serve.mjs` funciona igual en los dos casos.
+Las tres formas de arrancar se comportan igual: `astro dev` lleva un plugin que
+reenvia `/rpc`, y `serve.mjs` lo hace para `dist`. Antes el proxy solo existia
+en `serve.mjs`, asi que `npm run dev` servia las paginas y todas las llamadas al
+nodo daban 404 sin explicacion.
 
 Variables que lee:
 
@@ -108,7 +109,7 @@ El nav es el mismo en las dos, con un enlace a la otra.
 
 ### Salud
 
-Estado encendido/arrancando/apagado, tiempo en pantalla, disponibilidad de
+Estado encendido/arrancando/apagado, tiempo encendido, disponibilidad de
 sondeos, altura de bloque, peers, latencia del RPC, oferta y máximo PAPU,
 entradas y bytes de almacenamiento, slots y epochs, cola pendiente, extrinsics,
 raíces de estado y el registro de lo que el panel ha ido viendo.
@@ -121,6 +122,9 @@ sparklines de tendencia.
 
 Dos detalles que costaron encontrar, por si vuelven a salir:
 
+- **El estado "arrancando" exige haber visto el nodo antes.** Una pagina
+  recargada contra un nodo apagado no esta viendo nada arrancar, asi que dice
+  apagado desde el primer instante.
 - **La latencia solo se mide si el RPC respondió.** Medir cuánto tardó una
   conexión en fallar no es una latencia, y con el nodo apagado el gráfico se
   llenaba de tiempos de fallo como si fueran de servicio.

@@ -34,7 +34,6 @@ export default function HealthPanel() {
     return () => clearInterval(id);
   }, []);
 
-  const firstSeen = useRef<number>(Date.now());
   const lastOnline = useRef<number | null>(null);
   const lastBlock = useRef<number | null>(null);
   const lastErrorKey = useRef<string>('');
@@ -160,9 +159,13 @@ export default function HealthPanel() {
         </section>
 
         <Metric
-          label="Tiempo en pantalla"
-          value={formatUptime(Date.now() - firstSeen.current)}
-          foot={lastOnline.current ? `en linea desde ${formatUptime(Date.now() - lastOnline.current)}` : 'sin linea'}
+          label="Tiempo encendido"
+          value={snap?.uptime ? formatUptime(snap.uptime.ms) : '—'}
+          foot={
+            snap?.uptime
+              ? `nodo desde ${new Date(snap.uptime.startedAt).toLocaleTimeString('es', { hour12: false })}`
+              : 'el nodo no informa de su arranque'
+          }
           small
         />
 

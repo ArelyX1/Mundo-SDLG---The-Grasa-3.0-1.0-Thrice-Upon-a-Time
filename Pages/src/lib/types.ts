@@ -14,6 +14,12 @@ export interface Health {
   shouldHavePeers: boolean;
 }
 
+export interface Uptime {
+  ms: number;
+  seconds: number;
+  startedAt: string;
+}
+
 export interface SyncState {
   currentBlock: string;
   highestBlock: string;
@@ -116,6 +122,7 @@ export interface NetworkSnapshot {
   latencyMs: number | null;
   probes: Probe[];
   health: Health | null;
+  uptime: Uptime | null;
   sync: SyncState | null;
   nodeName: string | null;
   chainName: string | null;

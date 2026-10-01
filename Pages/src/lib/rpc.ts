@@ -55,6 +55,7 @@ function blank(): NetworkSnapshot {
     latencyMs: null,
     probes: [],
     health: null,
+    uptime: null,
     sync: null,
     nodeName: null,
     chainName: null,
@@ -113,11 +114,15 @@ export async function takeSnapshot(endpoint: string): Promise<NetworkSnapshot> {
   snap.health = health;
   snap.latencyMs = Math.round(performance.now() - sentAt);
 
-  const [name, chain, version, sync, runtime, params, supply, peers, addrs, finalized, latest, chainId] =
+  const [name, chain, version, uptime, sync, runtime, params, supply, peers, addrs, finalized, latest, chainId] =
     await Promise.all([
       guard('system_name', () => rpcCall<string>(endpoint, 'system_name')),
       guard('system_chain', () => rpcCall<string>(endpoint, 'system_chain')),
       guard('system_version', () => rpcCall<string>(endpoint, 'system_version')),
+      // El orden de esta lista tiene que ser exactamente el del destructuring de
+      // arriba. Al meterlo el primero se desplazaron todos los demas y el panel
+      // empezo a mostrar el uptime en la fila del nombre del nodo.
+      guard('system_uptime', () => rpcCall<NetworkSnapshot['uptime']>(endpoint, 'system_uptime')),
       guard('system_syncState', () => rpcCall<NetworkSnapshot['sync']>(endpoint, 'system_syncState')),
       guard('state_getRuntimeVersion', () => rpcCall<NetworkSnapshot['runtime']>(endpoint, 'state_getRuntimeVersion')),
       guard('papucoin_chainParams', () => rpcCall<NetworkSnapshot['params']>(endpoint, 'papucoin_chainParams')),
@@ -132,6 +137,7 @@ export async function takeSnapshot(endpoint: string): Promise<NetworkSnapshot> {
   snap.nodeName = name;
   snap.chainName = chain;
   snap.version = version;
+  snap.uptime = uptime;
   snap.sync = sync;
   snap.runtime = runtime;
   snap.params = params;
@@ -200,7 +206,13 @@ export function classifyState(
   sawItOnline: boolean,
 ): NodeState {
   if (snap.state === 'online') return 'online';
-  if (!sawItOnline && consecutiveFailures < 8) return 'starting';
+
+  // "Arrancando" solo tiene sentido si se ha visto el nodo antes, porque lo que
+  // se esta presenciando es un reinicio. Una pagina recien cargada contra un nodo
+  // que no contesta no esta viendo nada arrancar, asi que no puede decir que
+  // arranque. Antes bastaban ocho intentos seguidos para responder "arrancando",
+  // y una recarga contra un nodo apagado decia eso durante medio minuto.
+  if (!sawItOnline) return 'offline';
   if (consecutiveFailures < 3) return 'starting';
   return 'offline';
 }
