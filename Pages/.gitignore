@@ -4,3 +4,9 @@ dist/
 .astro/
 .DS_Store
 *.log
+
+# Configuracion local: puede llevar direcciones de nodos privados. El ejemplo
+# si se commit-ea, el .env real no.
+.env
+.env.local
+.env.*.local

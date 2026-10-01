@@ -14,10 +14,71 @@
 
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join, extname, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
+
+// Configuracion desde archivos .env, con la misma precedencia que usa Vite:
+//   .env -> .env.local -> .env.<modo> -> .env.<modo>.local
+// Gana el ultimo, pero lo que ya venia del entorno real gana sobre todos los
+// archivos, que es como se comprueba en produccion sin editar nada.
+//
+// El parser es propio a proposito: process.loadEnvFile no sobreescribe lo que ya
+// esta puesto, asi que con el .env cargado el .env.local se ignoraba y el orden
+// de precedencia no se cumplia.
+function parseEnv(text) {
+  const out = {};
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq < 1) continue;
+    const key = line.slice(0, eq).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    let value = line.slice(eq + 1).trim();
+    // comillas envolventes, y \ escapado minimo
+    if (
+      (value.startsWith('"') && value.endsWith('"') && value.length > 1) ||
+      (value.startsWith("'") && value.endsWith("'") && value.length > 1)
+    ) {
+      value = value.slice(1, -1);
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+async function loadEnv() {
+  const mode = process.env.NODE_ENV || 'development';
+  const files = ['.env', '.env.local', `.env.${mode}`, `.env.${mode}.local`];
+
+  // Lo que venia del entorno antes de tocar nada: intocable.
+  const realEnv = new Set(Object.keys(process.env));
+  const loaded = [];
+
+  for (const file of files) {
+    const path = join(here, file);
+    if (!existsSync(path)) continue;
+    try {
+      const parsed = parseEnv(await readFile(path, 'utf8'));
+      for (const [key, value] of Object.entries(parsed)) {
+        if (realEnv.has(key)) continue;
+        process.env[key] = value;
+      }
+      loaded.push(file);
+    } catch (err) {
+      console.warn(`no se pudo leer ${file}: ${err.message}`);
+    }
+  }
+  return loaded;
+}
+
+// Las variables se leyen despues de cargar los .env, asi que todo lo que
+// depende de ellas arranca cuando la carga ha terminado.
+const envFiles = await loadEnv();
+
 const root = resolve(here, process.env.SERVE_DIR ?? 'dist');
 const port = Number(process.env.PORT ?? 4321);
 const rpcTarget = process.env.RPC_TARGET ?? 'http://127.0.0.1:9944';
@@ -108,5 +169,11 @@ const server = createServer(async (req, res) => {
 server.listen(port, '127.0.0.1', () => {
   console.log(`sirviendo ${root}`);
   console.log(`  http://127.0.0.1:${port}/`);
+  console.log(`  http://127.0.0.1:${port}/connect`);
   console.log(`  /rpc -> ${rpcTarget}`);
+  console.log(
+    envFiles.length
+      ? `  config desde: ${envFiles.join(', ')}`
+      : '  config desde: variables de entorno (no hay .env)',
+  );
 });
