@@ -75,18 +75,25 @@ export function StateFlag({ state }: { state: 'online' | 'starting' | 'offline' 
   );
 }
 
-export function LogList({ rows }: { rows: { at: number; text: string; kind: 'ok' | 'err' }[] }) {
+export function LogList({ rows, hidden = 0 }: { rows: { at: number; text: string; kind: 'ok' | 'err' }[]; hidden?: number }) {
   if (rows.length === 0) {
     return <div className="empty">Sin registros todavia.</div>;
   }
   return (
-    <div className="log">
-      {rows.map((row, i) => (
-        <div className="log-row" key={`${row.at}-${i}`}>
-          <span className="log-time">{new Date(row.at).toLocaleTimeString('es', { hour12: false })}</span>
-          <span className={row.kind === 'err' ? 'log-err' : 'log-ok'}>{row.text}</span>
+    <div className="log-frame">
+      <div className="log">
+        {rows.map((row, i) => (
+          <div className="log-row" key={`${row.at}-${i}`}>
+            <span className="log-time">{new Date(row.at).toLocaleTimeString('es', { hour12: false })}</span>
+            <span className={row.kind === 'err' ? 'log-err' : 'log-ok'}>{row.text}</span>
+          </div>
+        ))}
+      </div>
+      {hidden > 0 && (
+        <div className="log-foot">
+          {hidden} entradas mas antiguas quedan fuera de la ventana
         </div>
-      ))}
+      )}
     </div>
   );
 }

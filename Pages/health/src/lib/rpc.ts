@@ -84,7 +84,6 @@ function blank(): NetworkSnapshot {
 export async function takeSnapshot(endpoint: string): Promise<NetworkSnapshot> {
   const snap = blank();
   const errors: string[] = [];
-  const started = performance.now();
 
   const guard = async <T>(label: string, run: () => Promise<T>): Promise<T | null> => {
     try {
@@ -95,20 +94,24 @@ export async function takeSnapshot(endpoint: string): Promise<NetworkSnapshot> {
     }
   };
 
-  // La salud primero: decide si el nodo está vivo.
+  // La salud primero: decide si el nodo está vivo. El reloj mide solo este viaje
+  // y, sobre todo, solo si respondió: medir cuánto tardó una conexión en fallar
+  // da un número que parece una latencia y no lo es, y con el nodo apagado el
+  // panel llegaba a plotting tiempos de fallo como si fueran de servicio.
+  const sentAt = performance.now();
   const health = await guard('system_health', () => rpcCall<NetworkSnapshot['health']>(endpoint, 'system_health'));
   if (health === null) {
     snap.state = 'offline';
     snap.reachable = false;
     snap.errors = errors;
-    snap.latencyMs = Math.round(performance.now() - started);
+    snap.latencyMs = null;
     return snap;
   }
 
   snap.reachable = true;
   snap.state = 'online';
   snap.health = health;
-  snap.latencyMs = Math.round(performance.now() - started);
+  snap.latencyMs = Math.round(performance.now() - sentAt);
 
   const [name, chain, version, sync, runtime, params, supply, peers, addrs, finalized, latest, chainId] =
     await Promise.all([

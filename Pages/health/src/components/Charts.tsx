@@ -89,7 +89,7 @@ export function BlockHeightChart({ data }: { data: { t: string; height: number |
         </defs>
         <CartesianGrid {...grid} vertical={false} />
         <XAxis dataKey="t" {...axis} minTickGap={40} />
-        <YAxis {...axis} width={62} domain={['auto', 'auto']} />
+        <YAxis {...axis} width={62} domain={['dataMin - 1', 'dataMax + 1']} allowDataOverflow />
         <Tooltip contentStyle={tooltipStyle} />
         <Area
           type="monotone"
@@ -145,19 +145,23 @@ export function SupplyChart({
 
 /** Bytes y entradas de almacenamiento, en dos escalas, porque no comparten magnitud. */
 export function StorageChart({ data }: { data: { t: string; items: number | null; octets: number | null }[] }) {
+  // Los dominios arrancan en cero a proposito. Con el automatico de Recharts y
+  // una serie que no se mueve —que en una cadena sin trabajo es justo lo que
+  // pasa— el eje se ajusta al unico valor que hay y las barras se dibujan
+  // llenando todo el alto, que se lee como si estuvieran en el tope.
   return (
     <ResponsiveContainer width="100%" height={220}>
       <ComposedChart data={data}>
         <CartesianGrid {...grid} vertical={false} />
         <XAxis dataKey="t" {...axis} minTickGap={40} />
-        <YAxis yAxisId="l" {...axis} width={54} />
-        <YAxis yAxisId="r" orientation="right" {...axis} width={62} />
+        <YAxis yAxisId="l" {...axis} width={54} domain={[0, (max: number) => (max > 0 ? max * 1.4 : 1)]} allowDataOverflow />
+        <YAxis yAxisId="r" orientation="right" {...axis} width={62} domain={[0, (max: number) => (max > 0 ? max * 1.4 : 1)]} allowDataOverflow />
         <Tooltip contentStyle={tooltipStyle} />
         <Legend {...legendStyle} />
         <Bar yAxisId="l" dataKey="items" fill={RED} isAnimationActive={false} name="entradas" />
         <Line
           yAxisId="r"
-          type="monotone"
+          type="stepAfter"
           dataKey="octets"
           stroke={WHITE}
           strokeWidth={2}
@@ -270,8 +274,22 @@ export function SlotEpochChart({
       <ComposedChart data={data}>
         <CartesianGrid {...grid} vertical={false} />
         <XAxis dataKey="t" {...axis} minTickGap={40} />
-        <YAxis yAxisId="slot" {...axis} width={70} domain={['dataMin', 'dataMax']} />
-        <YAxis yAxisId="epoch" orientation="right" {...axis} width={54} domain={['dataMin', 'dataMax']} />
+        {/* Slot y epoch crecen sin parar y nunca se repiten, asi que el eje
+            tiene que seguir a los datos. Se les da un margen del uno por ciento
+            para que una serie quieta no se pegue al borde superior. */}
+        <YAxis
+          yAxisId="slot"
+          {...axis}
+          width={70}
+          domain={[(min: number) => (Number.isFinite(min) ? min * 0.999 : 0), (max: number) => (Number.isFinite(max) ? max * 1.001 : 1)]}
+        />
+        <YAxis
+          yAxisId="epoch"
+          orientation="right"
+          {...axis}
+          width={54}
+          domain={[(min: number) => (Number.isFinite(min) ? min * 0.999 : 0), (max: number) => (Number.isFinite(max) ? max * 1.001 : 1)]}
+        />
         <Tooltip contentStyle={tooltipStyle} />
         <Legend {...legendStyle} />
         <Line

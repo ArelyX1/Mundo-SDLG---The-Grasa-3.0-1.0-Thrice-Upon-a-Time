@@ -36,30 +36,49 @@ export default function HealthPanel() {
 
   const firstSeen = useRef<number>(Date.now());
   const lastOnline = useRef<number | null>(null);
+  const lastBlock = useRef<number | null>(null);
+  const lastErrorKey = useRef<string>('');
+  const dropped = useRef(0);
 
+  // Solo se anota lo que cambia. Anotar cada sondeo metia una linea cada dos
+  // segundos aunque no pasara nada, y el registro llenaba su altura enseguida:
+  // no crecia la caja, se llenaba de ruido.
   useEffect(() => {
     if (!snap) return;
     const at = Date.now();
+
     if (snap.state === 'online') {
       if (lastOnline.current === null) {
         lastOnline.current = at;
         pushLog('nodo alcanzable por RPC', 'ok');
       }
-      if (snap.blockNumber !== null) {
+      if (snap.blockNumber !== null && snap.blockNumber !== lastBlock.current) {
+        lastBlock.current = snap.blockNumber;
         pushLog(`bloque ${snap.blockNumber} · slot ${snap.jamHeader?.timeSlotIndex ?? '—'}`, 'ok');
       }
-      snap.errors.forEach((e) => pushLog(e, 'err'));
-    } else {
+    } else if (lastOnline.current !== null) {
       lastOnline.current = null;
-      pushLog('sin respuesta del RPC: ' + (snap.errors[0] ?? 'nodo inaccesible'), 'err');
+      lastBlock.current = null;
+      pushLog('nodo sin respuesta: ' + (snap.errors[0] ?? 'inaccesible'), 'err');
+    }
+
+    // Los errores se agrupan: si los mismos tres se repiten cada dos segundos,
+    // se anotan una vez y se actualiza el contador.
+    const key = snap.errors.join('|');
+    if (snap.reachable && key !== lastErrorKey.current) {
+      lastErrorKey.current = key;
+      if (key) snap.errors.forEach((e) => pushLog(e, 'err'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snap?.reachable, snap?.blockNumber, snap?.state]);
+  }, [snap?.reachable, snap?.blockNumber, snap?.state, snap?.errors?.join('|')]);
 
   function pushLog(text: string, kind: 'ok' | 'err') {
     setLogs((prev) => {
-      const next = [{ at: Date.now(), text, kind }, ...prev];
-      return next.slice(0, MAX_LOG);
+      // Si la ultima linea es identica, solo se refresca su hora en vez de
+      // apilar una copia.
+      if (prev[0] && prev[0].text === text) return prev;
+      dropped.current += 1;
+      return [{ at: Date.now(), text, kind }, ...prev].slice(0, MAX_LOG);
     });
   }
 
