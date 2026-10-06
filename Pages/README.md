@@ -48,14 +48,29 @@ nodo daban 404 sin explicacion.
 Variables que lee:
 
 - `PORT` puerto donde escuchar, 4321 por defecto.
-- `NODES` nodos que el sitio puede mirar, separados por comas. Sin esto, se barren
-  los puertos de `SCAN_FROM` a `SCAN_TO`.
+- `HOST` IP donde escuchar, `0.0.0.0` por defecto: el panel se abre desde
+  cualquier dispositivo, no hace falta que ese dispositivo tenga un nodo. Con
+  `127.0.0.1` solo entra la maquina donde corre el sitio.
+- `NODES` nodos que el sitio puede mirar, separados por comas. Cada entrada es
+  una URL o un alias `nombre=url`; el alias es lo que se muestra y lo que se
+  pasa en `/rpc?node=<nombre>`. Sin esto, se barren los puertos de `SCAN_FROM`
+  a `SCAN_TO`.
 - `RPC_TARGET` nodo de reenvio cuando no hay `NODES`, `http://127.0.0.1:9944` por
   defecto. Si declaras `NODES`, esta variable manda solo sobre el primero.
 - `SCAN_FROM`, `SCAN_TO` rango que se barre, `9944`-`9960` por defecto.
-- `NODE_DEFAULT` nodo inicial por indice, `0` por defecto.
+- `NODE_DEFAULT` nodo inicial por indice o por alias, `0` por defecto.
 - `SERVE_DIR` directorio que se sirve, `dist` por defecto.
 - `NODE_ENV` modo, `development` por defecto.
+
+## El dispositivo no necesita el nodo
+
+El que abre la web no corre ningun nodo: entra al panel por la IP de la maquina
+donde sirve el sitio (el log la imprime al arrancar) y todo el RPC sale por el
+proxy de esa misma maquina. Lo mismo para la wallet: MetaMask se apunta al RPC
+de un nodo alcanzable (`http://ip:9944`) y desde ahi lee y firma la red. Lo unico
+que tiene que cumplirse es que el sitio alcance el seed y que el nodo escuche en
+una IP a la que el dispositivo llegue — en Windows hay que darle entrada al
+binario en el Firewall, ver abajo.
 
 ## Varios nodos
 
@@ -104,12 +119,50 @@ vez; lo que no cambia no genera ruido.
 Como declararlos:
 
 ```bash
-# en el .env: un solo seed, el resto se descubre solo
-NODES=http://192.168.1.10:9944
+# en el .env: un solo seed con alias, el resto se descubre solo
+NODES=grasa=http://192.168.1.10:9944
+```
+
+Con varios nodos por maquina, uno por alias — la web muestra el alias y practica
+bajo el capo de las IPs:
+
+```bash
+# en el .env
+NODES=nodo-0=http://192.168.1.10:9944,nodo-1=http://192.168.1.11:9945
 ```
 
 O no declarar nada y arrancar dos nodos: el sitio barre los puertos de localhost
 del rango y los encuentra solo.
+
+### Por que "can't be reached" en Windows
+
+El navegador dice "this site can't be reached" cuando el TCP ni siquiera abre, no
+cuando el nodo responde mal. Tres causas, en orden de frecuencia:
+
+1. **El Firewall de Windows corta la entrada.** El nodo escucha en todas las
+   interfaces (`:9944`), pero Windows bloquea por defecto la primera vez que un
+   binario Go abre un puerto. Con el nodo corriendo en esa maquina:
+
+   ```bat
+   netsh advfirewall firewall add rule name="strawberry rpc" dir=in action=allow protocol=TCP localport=9944,9945,9946
+   netsh advfirewall firewall add rule name="strawberry p2p" dir=in action=allow protocol=TCP localport=30334,30335,30336
+   REM y UDP para la parte P2P
+   netsh advfirewall firewall add rule name="strawberry udp" dir=in action=allow protocol=UDP localport=30334,30335,30336
+   ```
+
+   (Ajusta los puertos a los del `--rpc-port`/`--port` reales.) Si lo abres desde
+   la misma maquina por `http://localhost:9944` funciona y por `http://IP:9944`
+   no, es el firewall: localhost no lo cruza.
+
+2. **El panel como tal escuchaba antes solo en 127.0.0.1.** Desde otra maquina o
+   dispositivo no habia forma de abrirlo. Ahora el sitio escucha en `0.0.0.0`
+   salvo que `HOST` diga lo contrario; revisa el log del arranque para la IP
+   correcta.
+
+3. **Acertar con la URL.** El RPC del nodo no sirve paginas: un navegador dice
+   "method not allowed", que es la prueba de que el TCP si llega. La URL que se
+   abre en el navegador es la del panel (`http://ip:4321`); la del RPC es la que
+   se configura en MetaMask/wallets.
 
 El nodo elegido se recuerda en el navegador, asi que recargar no pierde la
 eleccion. En `/connect`, si el nodo que estaba sirviendo datos se cae, la pagina
@@ -141,9 +194,9 @@ servidor dice de donde saco la configuracion:
 
 ```
 sirviendo /ruta/Pages/dist
-  http://127.0.0.1:4321/
-  http://127.0.0.1:4321/connect
-  /rpc -> http://10.0.0.5:9944
+  http://192.168.1.10:4321/
+  http://192.168.1.10:4321/connect
+  /rpc -> [grasa] http://10.0.0.5:9944   (por defecto)
   config desde: .env, .env.local
 ```
 
