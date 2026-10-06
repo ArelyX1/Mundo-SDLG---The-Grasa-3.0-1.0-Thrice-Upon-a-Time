@@ -198,10 +198,21 @@ const server = createServer(async (req, res) => {
   if (req.url === '/nodes') return listNodes(res);
 
   // /rpc?node=<id> elige a que nodo va la llamada. Sin el, el de por defecto.
+  //
+  // El id puede ser un indice en NODES, o una URL completa: cuando la pagina se
+  // descubrio la red sola con network_map, el navegador le dice al proxy "pregunta
+  // a http://<ip>:<puerto>" y el proxy reenvia ahi directamente.
   if (req.url === '/rpc' || req.url.startsWith('/rpc?')) {
     const which = new URL(req.url, 'http://localhost').searchParams.get('node');
-    const id = which !== null && /^[0-9]+$/.test(which) ? Number(which) : Number(DEFAULT_NODE);
-    const target = NODES[id] ?? rpcTarget;
+    let target = null;
+    if (which !== null) {
+      if (/^https?:\/\//i.test(which)) {
+        target = which;
+      } else if (/^[0-9]+$/.test(which)) {
+        target = NODES[Number(which)] ?? rpcTarget;
+      }
+    }
+    if (!target) target = NODES[Number(DEFAULT_NODE)] ?? rpcTarget;
     return proxy(req, res, target);
   }
 

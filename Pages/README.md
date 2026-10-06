@@ -63,6 +63,24 @@ El sitio puede mirar mas de uno. Al abrirse los prueba todos y, si hay dos o mas
 vivos, deja elegir cual mirar. Con uno solo no aparece selector: no hay nada que
 elegir.
 
+### La red se descubre sola, sin listar nadie
+
+Basta con un nodo alcanzable (el "seed"). La pagina le pregunta por
+`network_map` y eso le dice quien esta en la red: el nodo mismo (con su nombre,
+version, indice de validador y puerto RPC) y sus peers, cada uno con su
+direccion P2P. Con eso el panel construye la lista y sondea a cada uno.
+
+No hay que mantener la lista de la red en la web: se anade un nodo, entra al
+mesh, y el panel lo ve en el siguiente sondeo. Si un nodo cae y otro vuelve,
+tambien se nota sin recargar la pagina.
+
+Como la red anuncia a los peers por su direccion P2P y eso no dice cual es su
+puerto RPC, el panel prueba candidatos en orden: el puerto RPC del seed, el
+9944 por defecto, y la convencion del devnet (RPC = P2P - 21390, que es lo que
+hace que 30334.. correspondan a 9944..). El primero que responda gana. Si la red
+usa puertos RPC propios, se lista cada nodo en `NODES` y la pagina lo usa tal
+cual, sin probar puertos.
+
 La red tolera que cualquier validador caiga. Con `--skip-missing-authors` el
 suplente escribe el turno del autor muerto y la cadena sigue avanzando. Cuando
 el nodo vuelve, se pone al dia solo. El panel muestra esa realidad:
@@ -86,8 +104,8 @@ vez; lo que no cambia no genera ruido.
 Como declararlos:
 
 ```bash
-# en el .env
-NODES=http://127.0.0.1:9944,http://127.0.0.1:9945,http://127.0.0.1:9946
+# en el .env: un solo seed, el resto se descubre solo
+NODES=http://192.168.1.10:9944
 ```
 
 O no declarar nada y arrancar dos nodos: el sitio barre los puertos de localhost

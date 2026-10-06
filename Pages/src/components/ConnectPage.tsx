@@ -15,7 +15,7 @@ import {
   sameChain,
   shortenAddress,
 } from '../lib/wallet';
-import { fetchNodes, pickNode, probeNodes, rpcUrl, type NodeProbe } from '../lib/nodes';
+import { expandWithDiscovery, fetchNodes, pickNode, probeNodes, rpcUrl, type NodeProbe } from '../lib/nodes';
 import type { ChainParams, PapuBalance, Supply } from '../lib/wallet';
 
 type Phase = 'idle' | 'connecting' | 'connected';
@@ -41,10 +41,14 @@ export default function ConnectPage() {
   const pickAliveNode = useCallback(async (): Promise<string> => {
     try {
       const info = await fetchNodes();
-      const probed = await probeNodes(info.nodes);
+      const expanded = await expandWithDiscovery(info.nodes);
+      const list = expanded.discovered ? expanded.nodes : info.nodes;
+      const probed = await probeNodes(list);
       setProbes(probed);
       const picked = pickNode(probed, null);
-      return picked ? rpcUrl(picked.id) : '/rpc';
+      // picked.url es la URL que respondio de verdad. El id ("self", "1"...)
+      // no es un indice de NODES cuando la red se descubrio sola.
+      return picked ? rpcUrl(picked.url) : '/rpc';
     } catch {
       return '/rpc';
     }

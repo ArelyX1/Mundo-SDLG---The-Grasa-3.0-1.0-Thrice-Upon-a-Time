@@ -16,6 +16,7 @@ import {
 } from './Charts';
 import { formatNumber, formatPapu, formatUptime } from '../lib/rpc';
 import {
+  expandWithDiscovery,
   fetchNodes,
   networkHealth,
   pickNode,
@@ -41,28 +42,41 @@ export default function HealthPanel() {
   const [nodeInfo, setNodeInfo] = useState({ source: 'scan', scanned: '', ready: false });
   const [chosen, setChosen] = useState<string | null>(null);
 
-  // El sondeo va al nodo que este elegido. Con uno solo es el de por defecto, y
-  // el hook arranca con el nodo 0 para no quedarse sin datos mientras se buscan.
-  const endpoint = chosen ? rpcUrl(chosen) : rpcUrl('0');
+  // El sondeo va al nodo que este elegido. Cuando la red se descubrio sola, el
+  // id elegido ("self", "1", "2"... no es un indice de NODES): la URL que
+  // funciona es la que el sondeo dejo anotada en el probe. El resto del panel
+  // necesita la URL absoluta para que el proxy sepa a quien preguntar.
+  const chosenProbe = nodes.find((n) => n.id === chosen);
+  const endpoint = chosenProbe?.alive
+    ? rpcUrl(chosenProbe.url)
+    : chosen
+      ? rpcUrl(chosen)
+      : rpcUrl('0');
   const { snap, samples, poll, endpoint: active, changeEndpoint } = useNetworkProbe(endpoint);
 
   // Busqueda de nodos al abrir. Solo se hace una vez: despues el selector manda.
+  // El servidor entrega el seed (lo de NODES) y a partir de ahi la red se
+  // descubre sola: network_map dice quien hay, y el panel sondea a cada uno.
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const info = await fetchNodes();
-        const probes = await probeNodes(info.nodes);
+        const expanded = await expandWithDiscovery(info.nodes);
         if (!alive) return;
-        setEntries(info.nodes);
+        const list = expanded.discovered ? expanded.nodes : info.nodes;
+        const probes = await probeNodes(list);
+        if (!alive) return;
+        setEntries(list);
         setNodes(probes);
-        setNodeInfo({ source: info.source, scanned: info.scanned, ready: true });
-        const remembered = rememberedNode(
-          info.nodes,
-          String(info.default ?? '0'),
-        );
+        setNodeInfo({
+          source: expanded.discovered ? 'network_map' : info.source,
+          scanned: info.scanned,
+          ready: true,
+        });
+        const remembered = rememberedNode(list, String(info.default ?? '0'));
         const picked = pickNode(probes, remembered);
-        if (picked) setChosen(rememberedNode(info.nodes, picked.id));
+        if (picked) setChosen(rememberedNode(list, picked.id));
       } catch {
         if (alive) setNodeInfo({ source: 'scan', scanned: '', ready: true });
       }
