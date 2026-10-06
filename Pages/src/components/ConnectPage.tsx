@@ -15,9 +15,8 @@ import {
   sameChain,
   shortenAddress,
 } from '../lib/wallet';
+import { fetchNodes, pickNode, probeNodes, rpcUrl, type NodeProbe } from '../lib/nodes';
 import type { ChainParams, PapuBalance, Supply } from '../lib/wallet';
-
-const ENDPOINT = '/rpc';
 
 type Phase = 'idle' | 'connecting' | 'connected';
 
@@ -33,44 +32,71 @@ export default function ConnectPage() {
   const [nodeUp, setNodeUp] = useState<boolean | null>(null);
   const [native, setNative] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [probes, setProbes] = useState<NodeProbe[]>([]);
 
-  const readNode = useCallback(async (addr: string | null) => {
+  // Elegir un nodo vivo para leer: si el que estaba cae, se pasa a otro sin
+  // que la persona tenga que hacer nada. La red no se queda sin mirar.
+  const [endpoint, setEndpoint] = useState<string>('/rpc');
+
+  const pickAliveNode = useCallback(async (): Promise<string> => {
     try {
-      const [p, s, b] = await Promise.all([
-        getParams(ENDPOINT),
-        getSupply(ENDPOINT),
-        getBlockNumber(ENDPOINT),
-      ]);
-      setParams(p);
-      setSupply(s);
-      setBlock(b);
-      setNodeUp(true);
-      setError(null);
-      if (addr) {
-        const bal = await getPapuBalance(ENDPOINT, addr);
-        setBalance(bal);
-      }
-    } catch (err) {
-      setNodeUp(false);
-      setError((err as Error).message);
+      const info = await fetchNodes();
+      const probed = await probeNodes(info.nodes);
+      setProbes(probed);
+      const picked = pickNode(probed, null);
+      return picked ? rpcUrl(picked.id) : '/rpc';
+    } catch {
+      return '/rpc';
     }
   }, []);
 
+  const readNode = useCallback(
+    async (addr: string | null) => {
+      try {
+        const [p, s, b] = await Promise.all([
+          getParams(endpoint),
+          getSupply(endpoint),
+          getBlockNumber(endpoint),
+        ]);
+        setParams(p);
+        setSupply(s);
+        setBlock(b);
+        setNodeUp(true);
+        setError(null);
+        if (addr) {
+          const bal = await getPapuBalance(endpoint, addr);
+          setBalance(bal);
+        }
+      } catch (err) {
+        setNodeUp(false);
+        setError((err as Error).message);
+        // El nodo elegido no responde: buscar otro vivo para la proxima pasada.
+        const next = await pickAliveNode();
+        setEndpoint(next);
+      }
+    },
+    [endpoint, pickAliveNode],
+  );
+
   useEffect(() => {
     setWalletPresent(hasWallet());
-    // Si ya hay una cuenta autorizada, no hay que pedirla otra vez.
-    getAccount().then((acc) => {
+    (async () => {
+      const ep = await pickAliveNode();
+      setEndpoint(ep);
+      // Si ya hay una cuenta autorizada, no hay que pedirla otra vez.
+      const acc = await getAccount();
       if (acc) {
         setAddress(acc);
         setPhase('connected');
         readNode(acc);
         getWalletChainId().then(setWalletChain);
+      } else {
+        readNode(null);
       }
-    });
-    readNode(null);
+    })();
     const id = setInterval(() => readNode(address), 4000);
     return () => clearInterval(id);
-  }, [readNode, address]);
+  }, [readNode, address, pickAliveNode]);
 
   async function connect() {
     setError(null);
@@ -98,6 +124,7 @@ export default function ConnectPage() {
 
   const nodeChainId = params?.evm?.chainId ?? null;
   const chainMatches = sameChain(walletChain, nodeChainId);
+  const aliveProbes = probes.filter((p) => p.alive);
 
   return (
     <div className="shell">
@@ -112,8 +139,9 @@ export default function ConnectPage() {
 
       {nodeUp === false && (
         <Notice kind="warn">
-          El nodo no responde en {ENDPOINT}. Los datos de la cadena apareceran cuando
-          este encendido.
+          El nodo no responde en {endpoint}. Los datos de la cadena apareceran cuando
+          este encendido. Si la red tiene otros validadores vivos, el panel de salud
+          lo muestra.
         </Notice>
       )}
 
@@ -173,6 +201,7 @@ export default function ConnectPage() {
               <Row k="saldo nativo" v={native ?? '—'} />
               <Row k="saldo PAPU" v={balance ? formatPapu(balance.raw) : '—'} />
               <Row k="altura" v={block ? String(Number(block)) : '—'} />
+              <Row k="nodo sirviendo" v={endpoint.replace('/rpc?node=', 'nodo ')} />
             </tbody>
           </table>
 
@@ -187,6 +216,33 @@ export default function ConnectPage() {
           )}
         </Card>
       </div>
+
+      {probes.length > 1 && (
+        <Card title="Red" note={`${aliveProbes.length} de ${probes.length} validadores responden`}>
+          <div className="nodes">
+            {probes.map((p) => (
+              <div key={p.id} className={`node${p.alive ? '' : ' node-off'}`}>
+                <span className="node-name">{p.name ?? `validador ${p.id}`}</span>
+                <span className="node-url">{p.url.replace(/^https?:\/\//, '')}</span>
+                <span className="node-meta">
+                  {p.alive ? (
+                    <>
+                      <span className="tag tag-red">altura {p.blockNumber ?? '—'}</span>{' '}
+                      <span style={{ color: 'var(--grey-dim)' }}>
+                        {p.slot !== null ? `slot ${p.slot}` : ''}
+                      </span>
+                    </>
+                  ) : (
+                    <span style={{ color: 'var(--red)' }}>
+                      caido · la cadena sigue
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-2">
         <Card title="Tu cuenta en la cadena" note="leido del nodo, no de la wallet">

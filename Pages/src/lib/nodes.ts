@@ -6,6 +6,11 @@
  * El navegador no puede llamar a los nodos directamente porque no mandan
  * cabeceras CORS, asi que todo pasa por /rpc?node=<id> y este modulo solo
  * elige a quien se le pregunta.
+ *
+ * La red tolera que cualquier validador caiga: con --skip-missing-authors el
+ * suplente escribe el turno del autor muerto y la cadena sigue avanzando.
+ * Cuando el nodo vuelve, se pone al dia solo. El panel muestra esa realidad:
+ * no alarmarse porque un validador este apagado si la cadena sigue viva.
  */
 
 export interface NodeEntry {
@@ -21,7 +26,29 @@ export interface NodeProbe {
   chain: string | null;
   version: string | null;
   blockNumber: number | null;
+  /** Indice del validador, derivado de la posicion en la lista NODES. */
+  validatorIndex: number | null;
+  /** Slot mas alto que este nodo ha visto en su cabecera JAM. */
+  slot: number | null;
+  /** Autor del ultimo bloque que este nodo tiene. */
+  lastAuthor: number | null;
   error?: string;
+}
+
+/**
+ * Foto de la red entera: que validadores hay, cuales responden, y si la
+ * cadena sigue avanzando aunque falte alguno.
+ */
+export interface NetworkHealth {
+  total: number;
+  alive: number;
+  down: number;
+  /** Altura de bloque comun entre los nodos vivos. */
+  chainTip: number | null;
+  /** Indice del autor del ultimo bloque visto por cualquier nodo vivo. */
+  lastAuthor: number | null;
+  /** Si los nodos vivos estan de acuerdo en la altura. */
+  tipsAgree: boolean;
 }
 
 const STORAGE_KEY = 'sdlg.node';
@@ -67,7 +94,8 @@ async function withLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promi
 }
 
 export async function probeNodes(nodes: NodeEntry[]): Promise<NodeProbe[]> {
-  return await withLimit(nodes, 4, async (node) => {
+  return await withLimit(nodes, 4, async (node, i) => {
+    const idx = Number(node.id);
     const base: NodeProbe = {
       id: node.id,
       url: node.url,
@@ -76,6 +104,9 @@ export async function probeNodes(nodes: NodeEntry[]): Promise<NodeProbe[]> {
       chain: null,
       version: null,
       blockNumber: null,
+      validatorIndex: Number.isFinite(idx) ? idx : null,
+      slot: null,
+      lastAuthor: null,
     };
     try {
       const call = (method: string, params: unknown = []) =>
@@ -91,26 +122,50 @@ export async function probeNodes(nodes: NodeEntry[]): Promise<NodeProbe[]> {
             return b.result;
           });
 
-      const [health, name, chain, version, block] = await Promise.all([
+      const [health, name, chain, version, block, header] = await Promise.all([
         call('system_health'),
         call('system_name'),
         call('system_chain'),
         call('system_version'),
         call('eth_blockNumber'),
+        call('jam_getHeader', [null]),
       ]);
 
+      const blockNumber = block ? Number.parseInt(String(block), 16) : null;
       return {
         ...base,
         alive: true,
         name: name ?? null,
         chain: chain ?? null,
         version: version ?? null,
-        blockNumber: block ? Number.parseInt(String(block), 16) : null,
+        blockNumber,
+        slot: header?.timeSlotIndex ?? null,
+        lastAuthor: header?.blockAuthorIndex ?? null,
       };
     } catch (err) {
       return { ...base, error: (err as Error).message };
     }
   });
+}
+
+/**
+ * Resumen de la red a partir de las sondas. Solo cuenta los nodos vivos para
+ * la altura comun: un nodo apagado no tiene altura que comparar.
+ */
+export function networkHealth(probes: NodeProbe[]): NetworkHealth {
+  const alive = probes.filter((p) => p.alive);
+  const tips = alive.map((p) => p.blockNumber).filter((n): n is number => n !== null);
+  const chainTip = tips.length > 0 ? Math.max(...tips) : null;
+  const tipsAgree = tips.length <= 1 || tips.every((t) => t === tips[0]);
+  const authors = alive.map((p) => p.lastAuthor).filter((n): n is number => n !== null);
+  return {
+    total: probes.length,
+    alive: alive.length,
+    down: probes.length - alive.length,
+    chainTip,
+    lastAuthor: authors.length > 0 ? authors[authors.length - 1] : null,
+    tipsAgree,
+  };
 }
 
 /** El nodo elegido la ultima vez, si sigue estando en la lista. */

@@ -17,21 +17,27 @@ import {
 import { formatNumber, formatPapu, formatUptime } from '../lib/rpc';
 import {
   fetchNodes,
+  networkHealth,
   pickNode,
   probeNodes,
   rememberNode,
   rememberedNode,
   rpcUrl,
+  type NetworkHealth,
+  type NodeEntry,
   type NodeProbe,
 } from '../lib/nodes';
 import { stallSeconds, uptimeRatio, useNetworkProbe } from '../lib/useNetworkProbe';
 import type { Sample } from '../lib/types';
 
 const MAX_LOG = 80;
+/** Cada cuanto se vuelve a preguntar a todos los nodos si estan vivos. */
+const NETWORK_PROBE_MS = 8000;
 
 export default function HealthPanel() {
   const [logs, setLogs] = useState<{ at: number; text: string; kind: 'ok' | 'err' }[]>([]);
   const [nodes, setNodes] = useState<NodeProbe[]>([]);
+  const [entries, setEntries] = useState<NodeEntry[]>([]);
   const [nodeInfo, setNodeInfo] = useState({ source: 'scan', scanned: '', ready: false });
   const [chosen, setChosen] = useState<string | null>(null);
 
@@ -48,6 +54,7 @@ export default function HealthPanel() {
         const info = await fetchNodes();
         const probes = await probeNodes(info.nodes);
         if (!alive) return;
+        setEntries(info.nodes);
         setNodes(probes);
         setNodeInfo({ source: info.source, scanned: info.scanned, ready: true });
         const remembered = rememberedNode(
@@ -65,13 +72,50 @@ export default function HealthPanel() {
     };
   }, []);
 
+  // Re-sondeo de todos los nodos en ciclo. La red no se queda quieta: un
+  // validador puede caerse o volver en cualquier momento, y el panel tiene
+  // que verlo sin recargar. Los cambios de estado se anotan en el registro.
+  const prevAlive = useRef<Map<string, boolean>>(new Map());
+  useEffect(() => {
+    if (entries.length === 0) return;
+    let alive = true;
+    const tick = async () => {
+      const probes = await probeNodes(entries);
+      if (!alive) return;
+      setNodes(probes);
+      // Anotar cambios: caidas y recuperaciones. Lo que no cambia no se anota.
+      for (const p of probes) {
+        const was = prevAlive.current.get(p.id);
+        if (was !== undefined && was !== p.alive) {
+          const label = p.name ?? `nodo ${p.id}`;
+          if (p.alive) {
+            pushLog(`${label} volvio a la red · altura ${p.blockNumber ?? '—'}`, 'ok');
+          } else {
+            pushLog(
+              `${label} se cayo · la cadena sigue con los demas validadores`,
+              'err',
+            );
+          }
+        }
+        prevAlive.current.set(p.id, p.alive);
+      }
+    };
+    tick();
+    const id = setInterval(tick, NETWORK_PROBE_MS);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
+
   function chooseNode(id: string) {
     rememberNode(id);
     setChosen(id);
     setLogs((prev) => [{ at: Date.now(), text: `nodo elegido: ${id}`, kind: 'ok' }, ...prev].slice(0, MAX_LOG));
   }
 
-  // El tiempo en pantalla depende del reloj del navegador, así que hay que
+  // El tiempo en pantalla depende del reloj del navegador, asi que hay que
   // forzar un repintado aunque el RPC no haya dicho nada nuevo.
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -150,10 +194,15 @@ export default function HealthPanel() {
     };
   }, [samples]);
 
+  const net: NetworkHealth = useMemo(() => networkHealth(nodes), [nodes]);
   const snapUp = uptimeRatio(samples);
   const stalled = stallSeconds(samples);
   const state = snap?.state ?? 'offline';
   const supplyMax = snap?.supply?.maxSupply ? Number(snap.supply.maxSupply) : null;
+
+  // La cadena esta viva si los nodos vivos avanzan, aunque falte alguno. Con
+  // skip de autores caidos, la red sigue escribiendo con el suplente.
+  const chainAlive = net.alive > 0 && net.chainTip !== null;
 
   const radar = {
     bloques: snap?.blockNumber ?? 0,
@@ -186,7 +235,42 @@ export default function HealthPanel() {
       {snap && !snap.reachable && (
         <div className="err-banner">
           El nodo no responde en {active}. Puede estar apagado o arrancando. El panel
-          reintenta solo.
+          reintenta solo. Si la red tiene mas validadores, la cadena sigue con los
+          que estan vivos.
+        </div>
+      )}
+
+      {/* Resumen de la red: cualquier validador puede caerse y la cadena sigue. */}
+      {net.total > 1 && (
+        <div className="grid grid-4">
+          <Metric
+            label="Validadores vivos"
+            value={`${net.alive} / ${net.total}`}
+            foot={net.down > 0 ? `${net.down} caido(s) · la cadena sigue` : 'todos responden'}
+            small
+          />
+          <Metric
+            label="Cadena"
+            value={chainAlive ? 'avanzando' : net.alive === 0 ? 'sin nodos' : 'sin datos'}
+            foot={
+              net.chainTip !== null
+                ? `altura ${formatNumber(net.chainTip)}${net.tipsAgree ? '' : ' · alturas distintas'}`
+                : 'ningun nodo vivo informa de altura'
+            }
+            small
+          />
+          <Metric
+            label="Autor ultimo bloque"
+            value={net.lastAuthor !== null ? `validador ${net.lastAuthor}` : '—'}
+            foot="con skip, el suplente escribe si el autor designado falta"
+            small
+          />
+          <Metric
+            label="Tolerancia"
+            value={`hasta ${Math.max(0, net.total - 1)} caidos`}
+            foot="skip de autores: el suplente toma el turno"
+            small
+          />
         </div>
       )}
 

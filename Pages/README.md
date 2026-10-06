@@ -63,18 +63,39 @@ El sitio puede mirar mas de uno. Al abrirse los prueba todos y, si hay dos o mas
 vivos, deja elegir cual mirar. Con uno solo no aparece selector: no hay nada que
 elegir.
 
+La red tolera que cualquier validador caiga. Con `--skip-missing-authors` el
+suplente escribe el turno del autor muerto y la cadena sigue avanzando. Cuando
+el nodo vuelve, se pone al dia solo. El panel muestra esa realidad:
+
+- **Validadores vivos**: X de Y responden. Si alguno falta, se ve tachado en el
+  selector, no se oculta.
+- **Cadena**: avanza aunque falten validadores. Si los nodos vivos estan de
+  acuerdo en la altura, lo dice; si no, tambien.
+- **Autor del ultimo bloque**: con skip, el suplente puede ser el autor de un
+  turno que no le correspondia.
+- **Tolerancia**: la red aguanta hasta N-1 caidos, siendo N el numero de
+  validadores.
+- **Registro**: el panel anota caidas y recuperaciones en el registro, sin
+  recargar. "nodo X se cayo · la cadena sigue con los demas validadores" y
+  "nodo X volvio a la red · altura N".
+
+El sondeo de todos los nodos se repite cada 8 segundos ademas del sondeo
+principal de 2 segundos al nodo elegido. Los cambios de estado se anotan una
+vez; lo que no cambia no genera ruido.
+
 Como declararlos:
 
 ```bash
 # en el .env
-NODES=http://127.0.0.1:9944,http://127.0.0.1:9945
+NODES=http://127.0.0.1:9944,http://127.0.0.1:9945,http://127.0.0.1:9946
 ```
 
 O no declarar nada y arrancar dos nodos: el sitio barre los puertos de localhost
 del rango y los encuentra solo.
 
 El nodo elegido se recuerda en el navegador, asi que recargar no pierde la
-eleccion.
+eleccion. En `/connect`, si el nodo que estaba sirviendo datos se cae, la pagina
+busca otro vivo automaticamente.
 
 El sondeo va limitado a cuatro nodos a la vez a proposito. Todas las llamadas
 salen por el proxy del sitio, o sea al mismo origen, y el navegador no deja mas
